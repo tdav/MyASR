@@ -1,0 +1,40 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Rider / VS Code
+.idea/
+.vscode/
+
+# NuGet
+*.nupkg
+.nuget/
+
+# Test outputs
+TestResults/
+*.trx
+coverage*.xml
+
+# Downloaded ONNX models — never commit
+models/
+*.onnx
+*.onnx.partial
+
+# Test artefacts that are large or generated
+MyASR.Tests/Assets/reference.wav
+MyASR.Tests/Assets/reference_mel.bin
+
+# Logs
+*.log
+%LOCALAPPDATA%/MyASR/
+
+# OS
+Thumbs.db
+.DS_Store
