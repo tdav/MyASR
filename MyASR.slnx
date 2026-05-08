@@ -1,4 +1,7 @@
 <Solution>
+  <Properties Name="Visual Studio">
+    <Property Name="StartupProject" Value="MyASR/MyASR.csproj" />
+  </Properties>
   <Project Path="MyASR/MyASR.csproj" />
   <Project Path="MyASR.Tests/MyASR.Tests.csproj" />
 </Solution>
