@@ -62,7 +62,7 @@ public partial class Main : Form
         this.modelProvider = modelProvider; this.paths = paths;
         this.hotkeys = hotkeys; this.logger = logger;
 
-        const string DefaultHotkey = "Pause";
+        const string DefaultHotkey = "Ctrl+Shift+X";
         (_hotkeyMod, _hotkeyVk) = ParseHotkey(settings.Hotkey);
         if (_hotkeyVk == 0)
         {
@@ -135,10 +135,21 @@ public partial class Main : Form
         }
         UseWaitCursor = false;
 
-        hotkeys.Register(Handle, HotkeyId, _hotkeyMod, _hotkeyVk);
+        var registered = hotkeys.Register(Handle, HotkeyId, _hotkeyMod, _hotkeyVk);
+        if (!registered)
+        {
+            logger?.LogWarning("Не удалось зарегистрировать глобальный хоткей {Hotkey}", settings.Hotkey);
+            MessageBox.Show(
+                $"Не удалось зарегистрировать глобальный хоткей '{settings.Hotkey}'.\n" +
+                "Возможно, он уже занят другим приложением.\n" +
+                "Кнопка микрофона на форме продолжит работать.",
+                "MyASR", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
         hotkeyPoll.Start();
         micButton.Enabled = true;
-        statusLabel.Text = "● Idle (модели готовы)";
+        statusLabel.Text = registered
+            ? $"● Idle (PTT: {settings.Hotkey})"
+            : "● Idle (PTT недоступен — занят)";
     }
 
     protected override void WndProc(ref Message m)
