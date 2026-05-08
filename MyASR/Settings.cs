@@ -5,7 +5,7 @@ namespace MyASR;
 public sealed class UserSettings
 {
     public string? MicDeviceId { get; set; }
-    public string Hotkey { get; set; } = "F9";
+    public string Hotkey { get; set; } = "Pause";
     public bool GlobalHotkey { get; set; } = true;
 
     private static string Path =>

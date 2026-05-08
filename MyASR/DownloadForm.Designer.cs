@@ -2,55 +2,76 @@ namespace MyASR;
 
 partial class DownloadForm
 {
-    private System.ComponentModel.IContainer? components = null;
-    private Label _label = null!;
-    private ProgressBar _progress = null!;
-    private Label _detail = null!;
-    private Button _retry = null!;
+    private System.ComponentModel.IContainer components = null;
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) components?.Dispose();
+        if (disposing && (components != null)) components.Dispose();
         base.Dispose(disposing);
     }
 
     private void InitializeComponent()
     {
-        components = new System.ComponentModel.Container();
+        _label = new Label();
+        _progress = new ProgressBar();
+        _detail = new Label();
+        _retry = new Button();
+        SuspendLayout();
+        // 
+        // _label
+        // 
+        _label.AutoEllipsis = true;
+        _label.Location = new Point(16, 21);
+        _label.Name = "_label";
+        _label.Size = new Size(223, 24);
+        _label.TabIndex = 0;
+        _label.Text = "Подготовка...";
+        // 
+        // _progress
+        // 
+        _progress.Location = new Point(16, 55);
+        _progress.Name = "_progress";
+        _progress.Size = new Size(329, 24);
+        _progress.Style = ProgressBarStyle.Continuous;
+        _progress.TabIndex = 1;
+        // 
+        // _detail
+        // 
+        _detail.ForeColor = SystemColors.GrayText;
+        _detail.Location = new Point(16, 84);
+        _detail.Name = "_detail";
+        _detail.Size = new Size(329, 18);
+        _detail.TabIndex = 2;
+        // 
+        // _retry
+        // 
+        _retry.Location = new Point(245, 15);
+        _retry.Name = "_retry";
+        _retry.Size = new Size(100, 30);
+        _retry.TabIndex = 3;
+        _retry.Text = "Повторить";
+        _retry.Visible = false;
+        // 
+        // DownloadForm
+        // 
+        AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(520, 160);
-        Text = "Загрузка моделей";
+        ClientSize = new Size(364, 110);
+        Controls.Add(_label);
+        Controls.Add(_progress);
+        Controls.Add(_detail);
+        Controls.Add(_retry);
         FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false; MinimizeBox = false;
-
-        _label = new Label
-        {
-            Text = "Подготовка...",
-            Location = new Point(16, 16),
-            Size = new Size(488, 24),
-            AutoEllipsis = true
-        };
-        _progress = new ProgressBar
-        {
-            Location = new Point(16, 50),
-            Size = new Size(488, 24),
-            Style = ProgressBarStyle.Continuous,
-            Minimum = 0, Maximum = 100
-        };
-        _detail = new Label
-        {
-            Text = "",
-            Location = new Point(16, 84),
-            Size = new Size(488, 18),
-            ForeColor = SystemColors.GrayText
-        };
-        _retry = new Button
-        {
-            Text = "Повторить",
-            Location = new Point(404, 110),
-            Size = new Size(100, 30),
-            Visible = false
-        };
-        Controls.AddRange([_label, _progress, _detail, _retry]);
+        MaximizeBox = false;
+        MinimizeBox = false;
+        Name = "DownloadForm";
+        StartPosition = FormStartPosition.CenterScreen;
+        Text = "Загрузка моделей";
+        ResumeLayout(false);
     }
+
+    private Label _label;
+    private ProgressBar _progress;
+    private Label _detail;
+    private Button _retry;
 }

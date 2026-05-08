@@ -49,10 +49,10 @@ internal static class Program
         });
 
         services.AddTransient<DownloadForm>();
-        services.AddTransient<Form1>();
+        services.AddTransient<Main>();
 
         using var sp = services.BuildServiceProvider();
-        var form = sp.GetRequiredService<Form1>();
+        var form = sp.GetRequiredService<Main>();
         Application.Run(form);
     }
 
