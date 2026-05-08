@@ -5,25 +5,36 @@ namespace MyASR.Tests.Models;
 public class ModelPathsTests
 {
     [Test]
+    [NotInParallel("env-var-mutex")]
     public async Task Default_PointsTo_LocalAppData_MyASR_Models()
     {
-        Environment.SetEnvironmentVariable("MYASR_MODELS_DIR", null);
-        var paths = ModelPaths.Default();
-        await Assert.That(paths.Root).EndsWith("MyASR\\models");
+        var saved = Environment.GetEnvironmentVariable("MYASR_MODELS_DIR");
+        try
+        {
+            Environment.SetEnvironmentVariable("MYASR_MODELS_DIR", null);
+            var paths = ModelPaths.Default();
+            await Assert.That(paths.Root).EndsWith("MyASR\\models");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("MYASR_MODELS_DIR", saved);
+        }
     }
 
     [Test]
+    [NotInParallel("env-var-mutex")]
     public async Task EnvironmentOverride_TakesPrecedence()
     {
-        Environment.SetEnvironmentVariable("MYASR_MODELS_DIR", @"C:\my-override");
+        var saved = Environment.GetEnvironmentVariable("MYASR_MODELS_DIR");
         try
         {
+            Environment.SetEnvironmentVariable("MYASR_MODELS_DIR", @"C:\my-override");
             var paths = ModelPaths.Default();
             await Assert.That(paths.Root).IsEqualTo(@"C:\my-override");
         }
         finally
         {
-            Environment.SetEnvironmentVariable("MYASR_MODELS_DIR", null);
+            Environment.SetEnvironmentVariable("MYASR_MODELS_DIR", saved);
         }
     }
 
