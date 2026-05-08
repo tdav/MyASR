@@ -59,11 +59,11 @@ public partial class Form1 : Form
         _copyBtn.Click    += (_, _) => CopyToClipboard();
         _saveTxtBtn.Click += (_, _) => SaveAsTxt();
 
-        Load += async (_, _) => await OnFormLoadAsync();
+        Shown += async (_, _) => await OnFormShownAsync();
         FormClosed += (_, _) => Cleanup();
     }
 
-    private async Task OnFormLoadAsync()
+    private async Task OnFormShownAsync()
     {
         PopulateDevices();
         if (_settings.MicDeviceId is { } savedId)
@@ -77,8 +77,12 @@ public partial class Form1 : Form
         if (_hotkeyCombo.Items.Contains(_settings.Hotkey))
             _hotkeyCombo.SelectedItem = _settings.Hotkey;
         _globalHotkey.Checked = _settings.GlobalHotkey;
+
+        _micButton.Enabled = false;
+
         if (!_modelProvider.AreModelsAvailable(_paths))
         {
+            _statusLabel.Text = "⏬ Загрузка моделей...";
             using var dlg = _sp.GetRequiredService<DownloadForm>();
             if (dlg.ShowDialog(this) != DialogResult.OK)
             {
@@ -88,10 +92,29 @@ public partial class Form1 : Form
                 return;
             }
         }
+
+        _statusLabel.Text = "⏳ Загрузка модели в память...";
+        UseWaitCursor = true;
+        Refresh();
+        try
+        {
+            await _asr.WarmupAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Model warmup failed");
+            UseWaitCursor = false;
+            MessageBox.Show($"Не удалось загрузить ONNX-модели:\n{ex.Message}",
+                            "MyASR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Close();
+            return;
+        }
+        UseWaitCursor = false;
+
         _hotkeys.Register(Handle, HotkeyId, 0, VK_F9);
         _hotkeyPoll.Start();
+        _micButton.Enabled = true;
         _statusLabel.Text = "● Idle (модели готовы)";
-        await Task.CompletedTask;
     }
 
     protected override void WndProc(ref Message m)

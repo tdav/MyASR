@@ -14,4 +14,5 @@ public interface IAsrService
 
     void StartCapture(string deviceId);
     Task StopAndRecognizeAsync();
+    Task WarmupAsync();
 }

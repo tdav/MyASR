@@ -94,6 +94,17 @@ public class AsrServiceTests
     }
 
     [Test]
+    public async Task WarmupAsync_CreatesDecoder_WithoutRecording()
+    {
+        var calls = 0;
+        var svc = new AsrService(new FakeMic(), new FakeFeatures(), () => { calls++; return new FakeDecoder(); });
+        await svc.WarmupAsync();
+        await svc.WarmupAsync(); // повторный вызов должен быть no-op
+        await Assert.That(calls).IsEqualTo(1);
+        await Assert.That(svc.State).IsEqualTo(AsrState.Idle);
+    }
+
+    [Test]
     public async Task StartCapture_WhileRecording_IsNoOp()
     {
         var svc = new AsrService(new FakeMic(), new FakeFeatures(), () => new FakeDecoder());

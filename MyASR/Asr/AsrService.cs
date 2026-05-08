@@ -23,6 +23,8 @@ public sealed class AsrService(IMicCapture mic, IFeatureExtractor features, Func
         SetState(AsrState.Recording);
     }
 
+    public Task WarmupAsync() => Task.Run(() => _decoder ??= decoderFactory());
+
     public async Task StopAndRecognizeAsync()
     {
         if (State != AsrState.Recording) return;
