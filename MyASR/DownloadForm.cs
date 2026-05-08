@@ -10,9 +10,14 @@ public partial class DownloadForm : Form
     private readonly ILogger<DownloadForm>? _logger;
     private CancellationTokenSource? _cts;
 
-    public DownloadForm(IModelProvider provider, ModelPaths paths, ILogger<DownloadForm>? logger = null)
+    public DownloadForm()
     {
         InitializeComponent();
+        _provider = null!; _paths = null!;
+    }
+
+    public DownloadForm(IModelProvider provider, ModelPaths paths, ILogger<DownloadForm>? logger = null) : this()
+    {
         _provider = provider; _paths = paths; _logger = logger;
         _retry.Click += async (_, _) => await StartDownloadAsync();
         Load += async (_, _) => await StartDownloadAsync();

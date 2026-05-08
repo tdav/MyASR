@@ -29,6 +29,15 @@ public partial class Form1 : Form
     private readonly System.Windows.Forms.Timer _maxLengthTimer = new() { Interval = 30_000 };
     private bool _hotkeyDownPrev;
 
+    // Дизайнер WinForms требует parameterless-конструктор для рендера формы.
+    // В рантайме всегда используется DI-конструктор ниже.
+    public Form1()
+    {
+        InitializeComponent();
+        _sp = null!; _asr = null!; _mic = null!;
+        _modelProvider = null!; _paths = null!; _hotkeys = null!;
+    }
+
     public Form1(
         IServiceProvider sp,
         IAsrService asr,
@@ -36,9 +45,8 @@ public partial class Form1 : Form
         IModelProvider modelProvider,
         ModelPaths paths,
         IHotkeyManager hotkeys,
-        ILogger<Form1>? logger = null)
+        ILogger<Form1>? logger = null) : this()
     {
-        InitializeComponent();
         _sp = sp; _asr = asr; _mic = mic;
         _modelProvider = modelProvider; _paths = paths;
         _hotkeys = hotkeys; _logger = logger;

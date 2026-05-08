@@ -40,12 +40,11 @@ public sealed class RnnTGreedyDecoder : IRnnTDecoder
         var tokens = new List<int>(64);
 
         // Encoder: input [1, n_mels=64, T] → encoder output [1, d_model=768, T/4].
-        var encOut = RunEncoder(mel);
+        var (encOut, tFrames) = RunEncoder(mel);
 
         // Greedy loop over encoder timesteps.
         var (decH, decC) = InitDecoderState();
         var lastToken = _vocab.BlankIndex;
-        var tFrames = encOut.GetLength(2);
 
         for (var t = 0; t < tFrames; t++)
         {
@@ -70,7 +69,7 @@ public sealed class RnnTGreedyDecoder : IRnnTDecoder
 
     // --- ONNX plumbing -----------------------------------------------------
 
-    private float[,,] RunEncoder(float[,] mel)
+    private (float[,,] encoded, int encodedLen) RunEncoder(float[,] mel)
     {
         var T = mel.GetLength(0);
         var M = mel.GetLength(1);
@@ -89,7 +88,8 @@ public sealed class RnnTGreedyDecoder : IRnnTDecoder
             NamedOnnxValue.CreateFromTensor(inputNames[1], lengths)
         };
         using var results = _encoder.Run(inputs);
-        var firstOut = results.First().AsTensor<float>(); // [1, 768, T/4]
+        var outArr = results.ToArray();
+        var firstOut = outArr[0].AsTensor<float>(); // [1, 768, T/4]
         var dims = firstOut.Dimensions.ToArray();
         var arr = firstOut.ToArray();
         var outT = dims[2];
@@ -98,7 +98,8 @@ public sealed class RnnTGreedyDecoder : IRnnTDecoder
         for (var d = 0; d < outD; d++)
             for (var t = 0; t < outT; t++)
                 output[0, d, t] = arr[d * outT + t];
-        return output;
+        var encodedLen = outArr[1].AsTensor<int>()[0]; // actual valid frames
+        return (output, Math.Min(encodedLen, outT));
     }
 
     private static float[] SliceTime(float[,,] enc, int t)
@@ -119,19 +120,21 @@ public sealed class RnnTGreedyDecoder : IRnnTDecoder
     private (float[] predHidden, DenseTensor<float>, DenseTensor<float>) RunDecoder(
         int lastToken, DenseTensor<float> h, DenseTensor<float> c)
     {
+        // Decoder inputs: x [1,1], h.1 [1,1,320], c.1 [1,1,320]
         var input = new DenseTensor<long>(new long[] { lastToken }, new[] { 1, 1 });
-        var inLen = new DenseTensor<long>(new long[] { 1L }, new[] { 1 });
         var inputNames = _decoder.InputMetadata.Keys.ToArray();
         var inputs = new[]
         {
             NamedOnnxValue.CreateFromTensor(inputNames[0], input),
-            NamedOnnxValue.CreateFromTensor(inputNames[1], inLen),
-            NamedOnnxValue.CreateFromTensor(inputNames[2], h),
-            NamedOnnxValue.CreateFromTensor(inputNames[3], c)
+            NamedOnnxValue.CreateFromTensor(inputNames[1], h),
+            NamedOnnxValue.CreateFromTensor(inputNames[2], c)
         };
         using var results = _decoder.Run(inputs);
         var arr = results.ToArray();
-        var pred = arr[0].AsTensor<float>().ToArray();   // [1, PredHidden, 1]
+        // dec output: [1,1,320] — reshape to [1,320,1] for joint network
+        var rawDec = arr[0].AsTensor<float>().ToArray();
+        var pred = new float[PredHidden];
+        Array.Copy(rawDec, pred, PredHidden);
         var newH = new DenseTensor<float>(arr[1].AsTensor<float>().ToArray(), new[] { 1, 1, PredHidden });
         var newC = new DenseTensor<float>(arr[2].AsTensor<float>().ToArray(), new[] { 1, 1, PredHidden });
         return (pred, newH, newC);
@@ -139,8 +142,9 @@ public sealed class RnnTGreedyDecoder : IRnnTDecoder
 
     private float[] RunJoint(float[] encStep, float[] predHidden)
     {
-        var enc = new DenseTensor<float>(encStep,    new[] { 1, encStep.Length, 1 });
-        var pred = new DenseTensor<float>(predHidden, new[] { 1, predHidden.Length, 1 });
+        // enc: [1,768,1], dec: [1,320,1]
+        var enc = new DenseTensor<float>(encStep,     new[] { 1, encStep.Length, 1 });
+        var pred = new DenseTensor<float>(predHidden, new[] { 1, PredHidden, 1 });
         var inputNames = _joint.InputMetadata.Keys.ToArray();
         var inputs = new[]
         {
