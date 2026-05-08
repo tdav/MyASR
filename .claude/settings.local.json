@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Test-Path *)",
+      "mcp__plugin_context-mode_context-mode__ctx_execute",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(mkdir -p \"C:\\\\Works\\\\MyASR\\\\docs\\\\superpowers\\\\specs\")",
+      "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
+      "Bash(git init *)",
+      "Bash(git branch *)",
+      "Bash(Select-String -Pattern 'obj|bin|\\\\.vs' -ErrorAction SilentlyContinue)"
+    ]
+  }
+}
