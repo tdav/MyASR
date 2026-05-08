@@ -8,7 +8,7 @@
     <LangVersion>latest</LangVersion>
     <IsPackable>false</IsPackable>
     <UseWindowsForms>false</UseWindowsForms>
-    <Platforms>x64</Platforms>
+    <Platforms>AnyCPU;x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <UseMicrosoftTestingPlatform>true</UseMicrosoftTestingPlatform>
     <GenerateTestingPlatformEntryPoint>true</GenerateTestingPlatformEntryPoint>
