@@ -55,7 +55,40 @@ def write_filterbank_json(fb):
     with open(os.path.join(OUT_DIR, "reference_filterbank_64x161.json"), "w", encoding="utf-8") as f:
         json.dump(data, f)
 
+def write_reference_audio_and_mel():
+    """Synthesizes a chirp WAV, computes its mel via gigaam, and saves expected text."""
+    try:
+        import gigaam
+        import soundfile as sf
+        import torch
+    except ImportError:
+        print("gigaam/soundfile/torch not installed — skipping reference.wav/mel/txt.")
+        return
+
+    import struct
+    t = np.linspace(0, 3, 3 * SR, endpoint=False)
+    chirp = 0.3 * np.sin(2 * np.pi * (200 + (4000 - 200) * t / 3) * t)
+    audio = np.concatenate([chirp, np.zeros(SR, dtype=np.float32)]).astype(np.float32)
+    wav_path = os.path.join(OUT_DIR, "reference.wav")
+    sf.write(wav_path, audio, SR, subtype="PCM_16")
+
+    model = gigaam.load_model("v3_rnnt")
+    fe = model.preprocessor
+    feats = fe(torch.from_numpy(audio).unsqueeze(0)).squeeze(0).numpy()
+    feats_t_mels = feats.T.astype(np.float32, copy=False)
+    mel_path = os.path.join(OUT_DIR, "reference_mel.bin")
+    with open(mel_path, "wb") as f:
+        f.write(struct.pack("<II", feats_t_mels.shape[0], feats_t_mels.shape[1]))
+        f.write(feats_t_mels.tobytes())
+
+    text = model.recognize(wav_path).strip()
+    with open(os.path.join(OUT_DIR, "reference.txt"), "w", encoding="utf-8") as f:
+        f.write(text)
+
+
 if __name__ == "__main__":
     fb = htk_filterbank()
     write_filterbank_json(fb)
     print(f"Wrote reference_filterbank_64x161.json with shape {fb.shape}")
+    write_reference_audio_and_mel()
+    print("done")
