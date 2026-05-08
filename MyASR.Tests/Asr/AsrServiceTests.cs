@@ -38,7 +38,7 @@ public class AsrServiceTests
     [Test]
     public async Task StartCapture_TransitionsToRecording()
     {
-        var svc = new AsrService(new FakeMic(), new FakeFeatures(), new FakeDecoder());
+        var svc = new AsrService(new FakeMic(), new FakeFeatures(), () => new FakeDecoder());
         svc.StartCapture("0");
         await Assert.That(svc.State).IsEqualTo(AsrState.Recording);
     }
@@ -48,7 +48,7 @@ public class AsrServiceTests
     {
         var mic = new FakeMic();
         mic.Pcm.AddRange(new float[16000]); // 1 sec of audio
-        var svc = new AsrService(mic, new FakeFeatures(), new FakeDecoder());
+        var svc = new AsrService(mic, new FakeFeatures(), () => new FakeDecoder());
         AsrResult? captured = null;
         svc.ResultReady += r => captured = r;
 
@@ -66,7 +66,7 @@ public class AsrServiceTests
         var mic = new FakeMic();
         mic.Pcm.AddRange(new float[1600]); // 0.1 sec — too short
         var dec = new FakeDecoder();
-        var svc = new AsrService(mic, new FakeFeatures(), dec);
+        var svc = new AsrService(mic, new FakeFeatures(), () => dec);
         AsrResult? captured = null;
         svc.ResultReady += r => captured = r;
 
@@ -82,7 +82,7 @@ public class AsrServiceTests
     {
         var mic = new FakeMic();
         mic.Pcm.AddRange(new float[16000]);
-        var svc = new AsrService(mic, new FakeFeatures(), new ThrowingDecoder());
+        var svc = new AsrService(mic, new FakeFeatures(), () => new ThrowingDecoder());
         Exception? captured = null;
         svc.Failed += e => captured = e;
 
@@ -96,7 +96,7 @@ public class AsrServiceTests
     [Test]
     public async Task StartCapture_WhileRecording_IsNoOp()
     {
-        var svc = new AsrService(new FakeMic(), new FakeFeatures(), new FakeDecoder());
+        var svc = new AsrService(new FakeMic(), new FakeFeatures(), () => new FakeDecoder());
         svc.StartCapture("0");
         svc.StartCapture("0"); // second call — must not throw or change state
         await Assert.That(svc.State).IsEqualTo(AsrState.Recording);

@@ -42,10 +42,10 @@ internal static class Program
 
         services.AddSingleton<IAsrService>(sp =>
         {
-            var mic   = sp.GetRequiredService<IMicCapture>();
-            var feats = sp.GetRequiredService<IFeatureExtractor>();
-            var dec   = sp.GetRequiredService<Func<IRnnTDecoder>>()();
-            return new AsrService(mic, feats, dec);
+            var mic     = sp.GetRequiredService<IMicCapture>();
+            var feats   = sp.GetRequiredService<IFeatureExtractor>();
+            var factory = sp.GetRequiredService<Func<IRnnTDecoder>>();
+            return new AsrService(mic, feats, factory);
         });
 
         services.AddTransient<DownloadForm>();

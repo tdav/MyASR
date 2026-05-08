@@ -3,10 +3,12 @@ using MyASR.Features;
 
 namespace MyASR.Asr;
 
-public sealed class AsrService(IMicCapture mic, IFeatureExtractor features, IRnnTDecoder decoder)
+public sealed class AsrService(IMicCapture mic, IFeatureExtractor features, Func<IRnnTDecoder> decoderFactory)
     : IAsrService, IDisposable
 {
     private const int MinSamples = 16000 * 3 / 10; // 0.3 sec @ 16 kHz
+
+    private IRnnTDecoder? _decoder;
 
     public AsrState State { get; private set; } = AsrState.Idle;
 
@@ -32,8 +34,9 @@ public sealed class AsrService(IMicCapture mic, IFeatureExtractor features, IRnn
         {
             var result = await Task.Run(() =>
             {
+                _decoder ??= decoderFactory();
                 var feats = features.Extract(pcm);
-                return decoder.Decode(feats, TimeSpan.FromSeconds(pcm.Length / 16000.0));
+                return _decoder.Decode(feats, TimeSpan.FromSeconds(pcm.Length / 16000.0));
             });
             ResultReady?.Invoke(result);
         }
@@ -57,6 +60,6 @@ public sealed class AsrService(IMicCapture mic, IFeatureExtractor features, IRnn
     public void Dispose()
     {
         mic.Dispose();
-        decoder.Dispose();
+        _decoder?.Dispose();
     }
 }
