@@ -30,6 +30,10 @@ models/
 *.onnx
 *.onnx.partial
 
+# Allow source-code Models/ directories (not the downloaded models folder)
+!MyASR/Models/
+!MyASR.Tests/Models/
+
 # Test artefacts that are large or generated
 MyASR.Tests/Assets/reference.wav
 MyASR.Tests/Assets/reference_mel.bin
