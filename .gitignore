@@ -4,6 +4,9 @@
 [Dd]ebug/
 [Rr]elease/
 
+# Debug symbols
+*.pdb
+
 # Visual Studio
 .vs/
 *.user
@@ -33,7 +36,6 @@ MyASR.Tests/Assets/reference_mel.bin
 
 # Logs
 *.log
-%LOCALAPPDATA%/MyASR/
 
 # OS
 Thumbs.db
