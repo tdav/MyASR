@@ -21,6 +21,7 @@ public partial class Form1 : Form
     private readonly ModelPaths _paths;
     private readonly IHotkeyManager _hotkeys;
     private readonly ILogger<Form1>? _logger;
+    private readonly UserSettings _settings = UserSettings.Load();
 
     private readonly System.Windows.Forms.Timer _vuTimer = new() { Interval = 33 };
     private readonly System.Windows.Forms.Timer _hotkeyPoll = new() { Interval = 16 };
@@ -65,6 +66,17 @@ public partial class Form1 : Form
     private async Task OnFormLoadAsync()
     {
         PopulateDevices();
+        if (_settings.MicDeviceId is { } savedId)
+        {
+            var devices = _mic.EnumerateDevices();
+            var idx = -1;
+            for (var i = 0; i < devices.Count; i++)
+                if (devices[i].Id == savedId) { idx = i; break; }
+            if (idx >= 0) _deviceCombo.SelectedIndex = idx;
+        }
+        if (_hotkeyCombo.Items.Contains(_settings.Hotkey))
+            _hotkeyCombo.SelectedItem = _settings.Hotkey;
+        _globalHotkey.Checked = _settings.GlobalHotkey;
         if (!_modelProvider.AreModelsAvailable(_paths))
         {
             using var dlg = _sp.GetRequiredService<DownloadForm>();
@@ -184,6 +196,10 @@ public partial class Form1 : Form
         _vuTimer.Stop();
         _hotkeyPoll.Stop();
         _maxLengthTimer.Stop();
+        if (_deviceCombo.SelectedItem is DeviceInfo dev) _settings.MicDeviceId = dev.Id;
+        if (_hotkeyCombo.SelectedItem is string hk) _settings.Hotkey = hk;
+        _settings.GlobalHotkey = _globalHotkey.Checked;
+        _settings.Save();
         _hotkeys.Dispose();
     }
 }
