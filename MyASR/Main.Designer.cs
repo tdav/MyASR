@@ -12,6 +12,7 @@ partial class Main
 
     private void InitializeComponent()
     {
+        System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Main));
         _deviceLabel = new Label();
         _deviceCombo = new ComboBox();
         micButton = new Button();
@@ -145,6 +146,7 @@ partial class Main
         Controls.Add(copyBtn);
         Controls.Add(saveTxtBtn);
         Controls.Add(statusStrip1);
+        Icon = (Icon)resources.GetObject("$this.Icon");
         MinimumSize = new Size(220, 240);
         Name = "Main";
         StartPosition = FormStartPosition.CenterParent;

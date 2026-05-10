@@ -13,14 +13,14 @@ public partial class Main : Form
     private const int HotkeyId = 0xA001;
     private const int WM_HOTKEY = 0x0312;
 
-    private const uint MOD_ALT     = 0x0001;
+    private const uint MOD_ALT = 0x0001;
     private const uint MOD_CONTROL = 0x0002;
-    private const uint MOD_SHIFT   = 0x0004;
-    private const uint MOD_WIN     = 0x0008;
+    private const uint MOD_SHIFT = 0x0004;
+    private const uint MOD_WIN = 0x0008;
 
-    private const uint VK_SHIFT   = 0x10;
+    private const uint VK_SHIFT = 0x10;
     private const uint VK_CONTROL = 0x11;
-    private const uint VK_MENU    = 0x12; // Alt
+    private const uint VK_MENU = 0x12; // Alt
 
     private readonly uint _hotkeyMod;
     private readonly uint _hotkeyVk;
@@ -71,19 +71,19 @@ public partial class Main : Form
         }
 
         this.asr.StateChanged += OnStateChanged;
-        this.asr.ResultReady  += OnResultReady;
-        this.asr.Failed       += OnFailed;
+        this.asr.ResultReady += OnResultReady;
+        this.asr.Failed += OnFailed;
 
-        vuTimer.Tick   += (_, _) => UpdateVu();
+        vuTimer.Tick += (_, _) => UpdateVu();
         hotkeyPoll.Tick += (_, _) => PollHotkey();
         maxLengthTimer.Tick += async (_, _) => { maxLengthTimer.Stop(); await this.asr.StopAndRecognizeAsync(); };
 
         micButton.MouseDown += (_, _) => StartRecording();
-        micButton.MouseUp   += async (_, _) => await StopRecording();
+        micButton.MouseUp += async (_, _) => await StopRecording();
         micButton.MouseLeave += async (_, _) => { if (this.asr.State == AsrState.Recording) await StopRecording(); };
 
-        clearBtn.Click   += (_, _) => resultBox.Clear();
-        copyBtn.Click    += (_, _) => CopyToClipboard();
+        clearBtn.Click += (_, _) => resultBox.Clear();
+        copyBtn.Click += (_, _) => CopyToClipboard();
         saveTxtBtn.Click += (_, _) => SaveAsTxt();
 
         Shown += async (_, _) => await OnFormShownAsync();
@@ -101,7 +101,7 @@ public partial class Main : Form
                 if (devices[i].Id == savedId) { idx = i; break; }
             if (idx >= 0) _deviceCombo.SelectedIndex = idx;
         }
-        
+
         micButton.Enabled = false;
 
         if (!modelProvider.AreModelsAvailable(paths))
@@ -150,6 +150,9 @@ public partial class Main : Form
         statusLabel.Text = registered
             ? $"● Idle (PTT: {settings.Hotkey})"
             : "● Idle (PTT недоступен — занят)";
+
+        if (!StartupManager.IsEnabled())
+            StartupManager.SetEnabled(true);
     }
 
     protected override void WndProc(ref Message m)
@@ -168,8 +171,8 @@ public partial class Main : Form
         // и все требуемые модификаторы нажаты одновременно.
         var down = hotkeys.IsKeyDown(_hotkeyVk)
             && ((_hotkeyMod & MOD_CONTROL) == 0 || hotkeys.IsKeyDown(VK_CONTROL))
-            && ((_hotkeyMod & MOD_SHIFT)   == 0 || hotkeys.IsKeyDown(VK_SHIFT))
-            && ((_hotkeyMod & MOD_ALT)     == 0 || hotkeys.IsKeyDown(VK_MENU));
+            && ((_hotkeyMod & MOD_SHIFT) == 0 || hotkeys.IsKeyDown(VK_SHIFT))
+            && ((_hotkeyMod & MOD_ALT) == 0 || hotkeys.IsKeyDown(VK_MENU));
         if (hotkeyDownPrev && !down && asr.State == AsrState.Recording)
             _ = asr.StopAndRecognizeAsync();
         hotkeyDownPrev = down;
@@ -199,10 +202,10 @@ public partial class Main : Form
         if (InvokeRequired) { BeginInvoke(() => OnStateChanged(s)); return; }
         statusLabel.Text = s.State switch
         {
-            AsrState.Idle      => "● Idle",
+            AsrState.Idle => "● Idle",
             AsrState.Recording => $"⏺ Recording {recordingTimer.Elapsed.TotalSeconds:F1}s",
-            AsrState.Decoding  => "⏳ Decoding...",
-            _                  => "?"
+            AsrState.Decoding => "⏳ Decoding...",
+            _ => "?"
         };
         micButton.Enabled = s.State != AsrState.Decoding;
     }
@@ -216,7 +219,10 @@ public partial class Main : Form
         resultBox.AppendText(line + Environment.NewLine);
         resultBox.SelectionStart = resultBox.TextLength;
         resultBox.ScrollToCaret();
+        Clipboard.SetText(line);
     }
+
+
 
     private void OnFailed(Exception ex)
     {
@@ -227,7 +233,7 @@ public partial class Main : Form
 
     private void PopulateDevices()
     {
-        _deviceCombo.DataSource    = mic.EnumerateDevices().ToList();
+        _deviceCombo.DataSource = mic.EnumerateDevices().ToList();
         _deviceCombo.DisplayMember = nameof(DeviceInfo.FriendlyName);
         if (_deviceCombo.Items.Count > 0) _deviceCombo.SelectedIndex = 0;
     }
@@ -275,10 +281,10 @@ public partial class Main : Form
             modifiers |= part.ToUpperInvariant() switch
             {
                 "CTRL" or "CONTROL" => MOD_CONTROL,
-                "ALT"               => MOD_ALT,
-                "SHIFT"             => MOD_SHIFT,
-                "WIN"               => MOD_WIN,
-                _                   => 0u
+                "ALT" => MOD_ALT,
+                "SHIFT" => MOD_SHIFT,
+                "WIN" => MOD_WIN,
+                _ => 0u
             };
 
             if (part.Length == 1 && char.IsLetter(part[0]))
@@ -289,14 +295,28 @@ public partial class Main : Form
 
             vk = part.ToUpperInvariant() switch
             {
-                "F1"  => 0x70u, "F2"  => 0x71u, "F3"  => 0x72u, "F4"  => 0x73u,
-                "F5"  => 0x74u, "F6"  => 0x75u, "F7"  => 0x76u, "F8"  => 0x77u,
-                "F9"  => 0x78u, "F10" => 0x79u, "F11" => 0x7Au, "F12" => 0x7Bu,
-                "SPACE" => 0x20u, "ENTER" or "RETURN" => 0x0Du,
-                "TAB"   => 0x09u, "ESC"  or "ESCAPE"  => 0x1Bu,
-                "INS"   or "INSERT" => 0x2Du, "DEL" or "DELETE" => 0x2Eu,
-                "HOME" => 0x24u, "END" => 0x23u,
-                "PGUP" or "PAGEUP" => 0x21u, "PGDN" or "PAGEDOWN" => 0x22u,
+                "F1" => 0x70u,
+                "F2" => 0x71u,
+                "F3" => 0x72u,
+                "F4" => 0x73u,
+                "F5" => 0x74u,
+                "F6" => 0x75u,
+                "F7" => 0x76u,
+                "F8" => 0x77u,
+                "F9" => 0x78u,
+                "F10" => 0x79u,
+                "F11" => 0x7Au,
+                "F12" => 0x7Bu,
+                "SPACE" => 0x20u,
+                "ENTER" or "RETURN" => 0x0Du,
+                "TAB" => 0x09u,
+                "ESC" or "ESCAPE" => 0x1Bu,
+                "INS" or "INSERT" => 0x2Du,
+                "DEL" or "DELETE" => 0x2Eu,
+                "HOME" => 0x24u,
+                "END" => 0x23u,
+                "PGUP" or "PAGEUP" => 0x21u,
+                "PGDN" or "PAGEDOWN" => 0x22u,
                 "PAUSE" or "BREAK" => 0x13u,
                 "SCROLL" or "SCROLLLOCK" => 0x91u,
                 _ => vk
@@ -311,7 +331,7 @@ public partial class Main : Form
         vuTimer.Stop();
         hotkeyPoll.Stop();
         maxLengthTimer.Stop();
-        if (_deviceCombo.SelectedItem is DeviceInfo dev) settings.MicDeviceId = dev.Id;        
+        if (_deviceCombo.SelectedItem is DeviceInfo dev) settings.MicDeviceId = dev.Id;
         settings.GlobalHotkey = true;
         settings.Save();
         hotkeys.Dispose();

@@ -62,6 +62,7 @@ partial class DownloadForm
         Controls.Add(_detail);
         Controls.Add(_retry);
         FormBorderStyle = FormBorderStyle.FixedDialog;
+        Icon = MyASR.AppIcon.Get();
         MaximizeBox = false;
         MinimizeBox = false;
         Name = "DownloadForm";
