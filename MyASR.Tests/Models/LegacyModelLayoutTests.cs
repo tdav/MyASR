@@ -73,7 +73,7 @@ public class LegacyModelLayoutTests
             var first = LegacyModelLayout.Migrate(root, ModelCatalog.GigaAmV3);
             var second = LegacyModelLayout.Migrate(root, ModelCatalog.GigaAmV3);
 
-            await Assert.That(first).IsEqualTo(4);
+            await Assert.That(first).IsEqualTo(ModelCatalog.GigaAmV3.Files.Count);
             await Assert.That(second).IsEqualTo(0);
         }
         finally { Directory.Delete(root, recursive: true); }
@@ -105,5 +105,67 @@ public class LegacyModelLayoutTests
         var root = Path.Combine(Path.GetTempPath(), "MyASR-tests-absent-" + Guid.NewGuid());
         var moved = LegacyModelLayout.Migrate(root, ModelCatalog.GigaAmV3);
         await Assert.That(moved).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Migrate_DestinationDirectoryExistsButEmpty_MigratesNormally()
+    {
+        var root = NewTempRoot();
+        var dir = Path.Combine(root, "gigaam-v3");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            foreach (var f in ModelCatalog.GigaAmV3.Files)
+                File.WriteAllText(Path.Combine(root, f.LocalName), f.LocalName);
+
+            var moved = LegacyModelLayout.Migrate(root, ModelCatalog.GigaAmV3);
+
+            await Assert.That(moved).IsEqualTo(ModelCatalog.GigaAmV3.Files.Count);
+            foreach (var f in ModelCatalog.GigaAmV3.Files)
+            {
+                await Assert.That(File.Exists(Path.Combine(dir, f.LocalName))).IsTrue();
+                await Assert.That(File.Exists(Path.Combine(root, f.LocalName))).IsFalse();
+            }
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Test]
+    public async Task Migrate_OneFileUnmovable_MigratesTheRestAndDoesNotThrow()
+    {
+        var root = NewTempRoot();
+        FileStream? lockedHandle = null;
+        try
+        {
+            foreach (var f in ModelCatalog.GigaAmV3.Files)
+                File.WriteAllText(Path.Combine(root, f.LocalName), f.LocalName);
+
+            var lockedName = ModelCatalog.GigaAmV3.Files[0].LocalName;
+            var lockedPath = Path.Combine(root, lockedName);
+
+            // FileShare.None makes File.Move throw an IOException (sharing violation) for
+            // this one file, simulating antivirus/another process holding a handle.
+            lockedHandle = new FileStream(lockedPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var moved = LegacyModelLayout.Migrate(root, ModelCatalog.GigaAmV3);
+
+            await Assert.That(moved).IsEqualTo(ModelCatalog.GigaAmV3.Files.Count - 1);
+
+            var dir = Path.Combine(root, "gigaam-v3");
+            await Assert.That(File.Exists(lockedPath)).IsTrue();
+            await Assert.That(File.Exists(Path.Combine(dir, lockedName))).IsFalse();
+
+            foreach (var f in ModelCatalog.GigaAmV3.Files)
+            {
+                if (f.LocalName == lockedName) continue;
+                await Assert.That(File.Exists(Path.Combine(dir, f.LocalName))).IsTrue();
+                await Assert.That(File.Exists(Path.Combine(root, f.LocalName))).IsFalse();
+            }
+        }
+        finally
+        {
+            lockedHandle?.Dispose();
+            Directory.Delete(root, recursive: true);
+        }
     }
 }

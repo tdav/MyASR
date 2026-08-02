@@ -114,7 +114,7 @@ public partial class Main : Form
 
         micButton.Enabled = false;
 
-        LegacyModelLayout.Migrate(ModelRoot.Resolve(), ModelCatalog.GigaAmV3);
+        LegacyModelLayout.Migrate(ModelRoot.Resolve(), ModelCatalog.GigaAmV3, logger);
 
         if (!await EnsureModelPresentAsync(selectedModel))
         {
