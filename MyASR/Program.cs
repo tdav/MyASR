@@ -24,7 +24,8 @@ internal static class Program
         });
 
         services.AddSingleton<HttpClient>();
-        services.AddSingleton<IModelSourceResolver>(_ => new ModelSourceResolver(null));
+        services.AddSingleton<IModelSourceResolver>(_ =>
+            new ModelSourceResolver(UserSettings.Load().ModelSources));
         services.AddSingleton<IModelProvider, ModelProvider>();
         services.AddSingleton<Func<ModelDescriptor, ModelPaths>>(_ =>
         {
