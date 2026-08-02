@@ -81,6 +81,13 @@ To measure the numbers below, a person needs about 10 minutes and a microphone:
    `dotnet test MyASR.Tests/MyASR.Tests.csproj`. `Transcribes_RussianSpeech` computes the word
    error rate itself via its `WordErrorRate` helper whenever `russian_sample.txt` is present and
    asserts it is below 0.30; note the number even if the assertion passes.
+   **Watch for a silent no-op:** if either the model folder or `russian_sample.wav` is still
+   missing when you strip `[Skip]`, `CanRun()` returns false and the test body does
+   `if (!CanRun()) return;` — it reports as *passed* in milliseconds, not failed, so a green run
+   does not by itself prove anything ran. A real run against the real encoder/decoder takes on the
+   order of 5-10 seconds per test (loading a ~90 MB encoder and a ~195 MB decoder and running
+   real inference); if the whole suite finishes in a couple of seconds, nothing was actually
+   measured.
 4. To compare int8 against fp32, repeat step 2-3 with `MYASR_MODELS_DIR` pointed at a folder
    holding `crisperwhisper2-small-fp32\` and temporarily change
    `ModelCatalog.CrisperWhisperSmallInt8` to `ModelCatalog.CrisperWhisperSmallFp32` in the test

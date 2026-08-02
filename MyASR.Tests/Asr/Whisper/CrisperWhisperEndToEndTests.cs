@@ -40,7 +40,9 @@ public class CrisperWhisperEndToEndTests
     private static bool CanRun() => ModelFolder() is not null && File.Exists(SamplePath);
 
     [Test]
-    [Skip("Требуются файлы модели и MyASR.Tests/Assets/russian_sample.wav")]
+    [Skip("Требуются файлы модели (MYASR_MODELS_DIR на корень с crisperwhisper2-small-int8/) и " +
+        "MyASR.Tests/Assets/russian_sample.wav вместе с его транскриптом " +
+        "MyASR.Tests/Assets/russian_sample.txt")]
     public async Task Transcribes_RussianSpeech()
     {
         if (!CanRun()) return;
@@ -63,7 +65,9 @@ public class CrisperWhisperEndToEndTests
     }
 
     [Test]
-    [Skip("Требуются файлы модели и MyASR.Tests/Assets/russian_sample.wav")]
+    [Skip("Требуются файлы модели (MYASR_MODELS_DIR на корень с crisperwhisper2-small-int8/) и " +
+        "MyASR.Tests/Assets/russian_sample.wav вместе с его транскриптом " +
+        "MyASR.Tests/Assets/russian_sample.txt")]
     public async Task IntendedMode_DoesNotEmitVocalEventMarkers()
     {
         if (!CanRun()) return;
