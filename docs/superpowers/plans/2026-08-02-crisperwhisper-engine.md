@@ -1444,20 +1444,23 @@ public class WhisperPromptTests
     }
 
     [Test]
-    public async Task Reference_PromptStartsWithStartOfTranscript_AndPicksRussian()
+    public async Task Reference_PromptLeadsWithModeTags_ThenTheWhisperPrefix()
     {
         var r = LoadReference();
-        await Assert.That(r.prompt_token_ids[0]).IsEqualTo(50258);
-        await Assert.That(r.prompt_token_ids).Contains(50263);
-        await Assert.That(r.prompt_token_ids).Contains(50359);
+
+        // The reference implementation emits all five intended-mode tags before the standard
+        // Whisper prefix. This is the opposite of the obvious guess, which is why it is asserted.
+        await Assert.That(r.prompt_token_ids.Take(5)).IsEquivalentTo(new[] { 51885, 51886, 51887, 51888, 51889 });
+        await Assert.That(r.prompt_token_ids.Skip(5)).IsEquivalentTo(new[] { 50258, 50263, 50359, 50363 });
     }
 
     [Test]
-    public async Task Reference_PromptCarriesAnIntendedModeToken()
+    public async Task Reference_PromptSelectsRussianAndTranscription()
     {
         var r = LoadReference();
-        var intended = r.prompt_token_ids.Where(id => id is >= 51885 and <= 51889).ToList();
-        await Assert.That(intended).IsNotEmpty();
+        await Assert.That(r.prompt_token_ids).Contains(50263); // <|ru|>
+        await Assert.That(r.prompt_token_ids).Contains(50359); // <|transcribe|>
+        await Assert.That(r.prompt_token_ids).DoesNotContain(50358); // <|translate|>
     }
 
     [Test]
@@ -1473,7 +1476,7 @@ public class WhisperPromptTests
         var r = LoadReference();
         var tokenizer = WhisperTestVocab.Build(r);
 
-        var built = WhisperPrompt.Build(tokenizer, WhisperPrompt.RussianToken, WhisperPrompt.IntendedModeToken);
+        var built = WhisperPrompt.Build(tokenizer, WhisperPrompt.RussianToken, WhisperPrompt.IntendedModeTokens);
 
         await Assert.That(built).IsEquivalentTo(r.prompt_token_ids);
     }
@@ -1509,11 +1512,12 @@ internal static class WhisperTestVocab
             ["<|endoftext|>"] = specials.GetProperty("endoftext").GetInt32(),
         };
 
-        // The intended-mode token id is whichever 51885-51889 id the reference prompt used.
+        // All five intended-mode tags, taken from the reference prompt in the order it used them.
         var prompt = doc.RootElement.GetProperty("prompt_token_ids").EnumerateArray()
             .Select(e => e.GetInt32()).ToList();
-        var intended = prompt.FirstOrDefault(id => id is >= 51885 and <= 51889);
-        if (intended != 0) added[WhisperPrompt.IntendedModeToken] = intended;
+        var intended = prompt.Where(id => id is >= 51885 and <= 51889).ToList();
+        for (var i = 0; i < WhisperPrompt.IntendedModeTokens.Count && i < intended.Count; i++)
+            added[WhisperPrompt.IntendedModeTokens[i]] = intended[i];
 
         var dir = Path.Combine(Path.GetTempPath(), "MyASR-tests-" + Guid.NewGuid());
         Directory.CreateDirectory(dir);
@@ -1538,15 +1542,15 @@ Create `MyASR/Asr/Whisper/WhisperPrompt.cs`:
 ```csharp
 namespace MyASR.Asr.Whisper;
 
-/// <param name="StartOfTranscript">Always the first prompt token.</param>
+/// <param name="ModeTags">The style-control tokens, which precede everything else.</param>
 /// <param name="EndOfText">Terminates generation.</param>
 public sealed record WhisperSpecialTokens(
+    IReadOnlyList<int> ModeTags,
     int StartOfTranscript,
     int EndOfText,
     int Language,
     int Transcribe,
-    int NoTimestamps,
-    int Mode);
+    int NoTimestamps);
 
 /// <summary>
 /// Builds the decoder prompt prefix. CrisperWhisper's verbatim and intended styles differ only
@@ -1562,29 +1566,49 @@ public static class WhisperPrompt
     public const string TranscribeToken = "<|transcribe|>";
     public const string NoTimestampsToken = "<|notimestamps|>";
 
-    /// <summary>Intended style: clean readable text. Verbatim would emit [UM], [UH] and stutters.</summary>
-    public const string IntendedModeToken = "[intended_3]";
+    /// <summary>
+    /// Intended style: clean readable text. Verbatim would emit [UM], [UH] and stutters.
+    /// All five intensity tags are emitted, not one — that is what the reference implementation
+    /// does, captured from `crisperwhisper.prompt.PromptBuilder(...).intended()`.
+    /// </summary>
+    public static readonly IReadOnlyList<string> IntendedModeTokens =
+        ["[intended_1]", "[intended_2]", "[intended_3]", "[intended_4]", "[intended_5]"];
 
-    public static WhisperSpecialTokens Resolve(WhisperTokenizer tokenizer, string languageToken, string modeToken) =>
+    public static readonly IReadOnlyList<string> VerbatimModeTokens =
+        ["[verbatim_1]", "[verbatim_2]", "[verbatim_3]", "[verbatim_4]", "[verbatim_5]"];
+
+    public static WhisperSpecialTokens Resolve(
+        WhisperTokenizer tokenizer, string languageToken, IReadOnlyList<string> modeTokens) =>
         new(
+            ModeTags: [.. modeTokens.Select(tokenizer.IdOf)],
             StartOfTranscript: tokenizer.IdOf(StartOfTranscriptToken),
             EndOfText: tokenizer.IdOf(EndOfTextToken),
             Language: tokenizer.IdOf(languageToken),
             Transcribe: tokenizer.IdOf(TranscribeToken),
-            NoTimestamps: tokenizer.IdOf(NoTimestampsToken),
-            Mode: tokenizer.IdOf(modeToken));
+            NoTimestamps: tokenizer.IdOf(NoTimestampsToken));
 
-    public static int[] Build(WhisperTokenizer tokenizer, string languageToken, string modeToken)
+    /// <summary>
+    /// Mode tags come <b>first</b>, then the standard Whisper decoder prefix. This ordering is
+    /// the opposite of what Whisper's own documentation would suggest, and was taken from the
+    /// reference implementation's captured output — do not "correct" it.
+    /// </summary>
+    public static int[] Build(
+        WhisperTokenizer tokenizer, string languageToken, IReadOnlyList<string> modeTokens)
     {
-        var t = Resolve(tokenizer, languageToken, modeToken);
-        return [t.StartOfTranscript, t.Language, t.Transcribe, t.NoTimestamps, t.Mode];
+        var t = Resolve(tokenizer, languageToken, modeTokens);
+        return [.. t.ModeTags, t.StartOfTranscript, t.Language, t.Transcribe, t.NoTimestamps];
     }
 }
 ```
 
-If `Build_ReproducesTheReferencePrompt` fails, the reference dump is authoritative: reorder the
-array here (and change `IntendedModeToken` if the reference used a different intensity level) to
-match `prompt_token_ids`. Do not weaken the test.
+The captured reference prompt for Russian + intended is exactly:
+
+```
+[51885, 51886, 51887, 51888, 51889, 50258, 50263, 50359, 50363]
+```
+
+If `Build_ReproducesTheReferencePrompt` fails, the reference dump is authoritative — change this
+code to match `prompt_token_ids`, never the test.
 
 - [ ] **Step 4: Write the loop**
 
@@ -1784,11 +1808,12 @@ namespace MyASR.Models;
 /// <summary>File names produced by <c>tools/export_crisperwhisper_onnx.py</c>.</summary>
 public static class CrisperWhisperFiles
 {
-    public const string Encoder          = "encoder_model.onnx";
-    public const string DecoderMerged    = "decoder_model_merged.onnx";
-    public const string Vocab            = "vocab.json";
-    public const string AddedTokens      = "added_tokens.json";
-    public const string GenerationConfig = "generation_config.json";
+    public const string Encoder             = "encoder_model.onnx";
+    public const string DecoderMerged       = "decoder_model_merged.onnx";
+    public const string Vocab               = "vocab.json";
+    public const string AddedTokens         = "added_tokens.json";
+    public const string GenerationConfig    = "generation_config.json";
+    public const string PreprocessorConfig  = "preprocessor_config.json";
 }
 ```
 
@@ -1798,28 +1823,36 @@ In `MyASR/Models/ModelCatalog.cs`, add the two descriptors and extend `All`:
     private const string CrisperWhisperLicence =
         "некоммерческая исследовательская лицензия nyra-health";
 
-    // Replace DefaultBaseUri with wherever the exported folders are published, or leave it and
-    // set MYASR_MODEL_SOURCE_CRISPERWHISPER2_SMALL_INT8 to a local folder.
-    private const string CrisperWhisperInt8Base = "https://huggingface.co/USER/CrisperWhisper2.0_small-onnx/resolve/main/int8/";
-    private const string CrisperWhisperFp32Base = "https://huggingface.co/USER/CrisperWhisper2.0_small-onnx/resolve/main/fp32/";
+    /// <summary>
+    /// CrisperWhisper has no published ONNX build, so there is no URL to default to. The default
+    /// source is a local folder the user fills with the output of
+    /// tools/export_crisperwhisper_onnx.py; an HTTP mirror can be supplied per model through
+    /// MYASR_MODEL_SOURCE_&lt;ID&gt; or settings.json without touching this file.
+    /// </summary>
+    private static string LocalSourceFolder(string folderName) =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MyASR", "model-sources", folderName);
 
-    // Sizes below are the values printed by tools/export_crisperwhisper_onnx.py. They only feed
-    // the progress bar before the source reports a real length, so being approximate is fine —
-    // but paste the printed block over them, digests included, once you have published a build.
+    // Sizes and digests below are the values printed by tools/export_crisperwhisper_onnx.py for
+    // the build documented in .superpowers/sdd/p2-task-1-report.md. The digests are verified on
+    // acquisition, so they must match the artefacts the user actually has; if you re-export with
+    // different versions, paste the newly printed block over these.
     public static readonly ModelDescriptor CrisperWhisperSmallInt8 = new(
         Id: "crisperwhisper2-small-int8",
         DisplayName: "CrisperWhisper 2.0 small (int8)",
         LicenceNote: CrisperWhisperLicence,
         Kind: AsrEngineKind.Whisper,
         FolderName: "crisperwhisper2-small-int8",
-        DefaultBaseUri: CrisperWhisperInt8Base,
+        DefaultBaseUri: LocalSourceFolder("crisperwhisper2-small-int8"),
         Files:
         [
-            new(CrisperWhisperFiles.Encoder,          CrisperWhisperFiles.Encoder,           92_000_000, null),
-            new(CrisperWhisperFiles.DecoderMerged,    CrisperWhisperFiles.DecoderMerged,    170_000_000, null),
-            new(CrisperWhisperFiles.Vocab,            CrisperWhisperFiles.Vocab,              1_100_000, null),
-            new(CrisperWhisperFiles.AddedTokens,      CrisperWhisperFiles.AddedTokens,           40_000, null),
-            new(CrisperWhisperFiles.GenerationConfig, CrisperWhisperFiles.GenerationConfig,       4_000, null),
+            new("encoder_model.onnx", "encoder_model.onnx", 92_216_514, "5d9167e3c5a583702f2c951782cbf7ab924896ac18accf8e7bd3492d93ad51b9"),
+            new("decoder_model_merged.onnx", "decoder_model_merged.onnx", 195_142_781, "ce58bf3997f1ecb937e6f1c125211515578c8e41e66f41f981961da6c51412b7"),
+            new("vocab.json", "vocab.json", 835_550, "8f680bba319e01a653d2e8a5dbc17a9157179e0576e6ce74ce0c06356c6e24f9"),
+            new("added_tokens.json", "added_tokens.json", 35_275, "54e87fd086baa530e05082c11feacf9df5439453c5fae279611f3099ec844dc5"),
+            new("generation_config.json", "generation_config.json", 3_834, "f1003e27072800e0d7c764a03159c17c07b3448102e24463eb099b3e4899b048"),
+            new("preprocessor_config.json", "preprocessor_config.json", 356, "994838f1fa6462c8b9b3c90edada831f11f3dd8b4664634e18f4694d005c9dbf"),
         ]);
 
     public static readonly ModelDescriptor CrisperWhisperSmallFp32 = new(
@@ -1828,23 +1861,23 @@ In `MyASR/Models/ModelCatalog.cs`, add the two descriptors and extend `All`:
         LicenceNote: CrisperWhisperLicence,
         Kind: AsrEngineKind.Whisper,
         FolderName: "crisperwhisper2-small-fp32",
-        DefaultBaseUri: CrisperWhisperFp32Base,
+        DefaultBaseUri: LocalSourceFolder("crisperwhisper2-small-fp32"),
         Files:
         [
-            new(CrisperWhisperFiles.Encoder,          CrisperWhisperFiles.Encoder,          350_000_000, null),
-            new(CrisperWhisperFiles.DecoderMerged,    CrisperWhisperFiles.DecoderMerged,    620_000_000, null),
-            new(CrisperWhisperFiles.Vocab,            CrisperWhisperFiles.Vocab,              1_100_000, null),
-            new(CrisperWhisperFiles.AddedTokens,      CrisperWhisperFiles.AddedTokens,           40_000, null),
-            new(CrisperWhisperFiles.GenerationConfig, CrisperWhisperFiles.GenerationConfig,       4_000, null),
+            new("encoder_model.onnx", "encoder_model.onnx", 352_747_519, "7ac7c1d6b93f974550759d5eb98d22d012378325861f1bbe64f63d4108df9983"),
+            new("decoder_model_merged.onnx", "decoder_model_merged.onnx", 774_523_818, "45bb2a2e5e102615767477570aab60e7a4551e182bfc7b28cb86072265a0c86e"),
+            new("vocab.json", "vocab.json", 835_550, "8f680bba319e01a653d2e8a5dbc17a9157179e0576e6ce74ce0c06356c6e24f9"),
+            new("added_tokens.json", "added_tokens.json", 35_275, "54e87fd086baa530e05082c11feacf9df5439453c5fae279611f3099ec844dc5"),
+            new("generation_config.json", "generation_config.json", 3_834, "f1003e27072800e0d7c764a03159c17c07b3448102e24463eb099b3e4899b048"),
+            new("preprocessor_config.json", "preprocessor_config.json", 356, "994838f1fa6462c8b9b3c90edada831f11f3dd8b4664634e18f4694d005c9dbf"),
         ]);
 
     public static IReadOnlyList<ModelDescriptor> All { get; } =
         [GigaAmV3, CrisperWhisperSmallInt8, CrisperWhisperSmallFp32];
 ```
 
-If the export produced `*.onnx_data` siblings, add them as extra `ModelFileEntry` rows with the
-same name for `LocalName` and `SourceRelativePath` — ONNX Runtime resolves them by exact filename
-next to the graph.
+`ModelCatalog.cs` needs `using System.IO;` for `Path.Combine`. The export produced no
+`*.onnx_data` siblings — that was checked directly — so the file lists above are complete.
 
 - [ ] **Step 4: Write the ONNX decoder step**
 
@@ -2074,7 +2107,7 @@ public sealed class WhisperOnnxEngine : IAsrEngine
             encoder,
             paths.File(CrisperWhisperFiles.DecoderMerged),
             options,
-            WhisperPrompt.Build(tokenizer, WhisperPrompt.RussianToken, WhisperPrompt.IntendedModeToken),
+            WhisperPrompt.Build(tokenizer, WhisperPrompt.RussianToken, WhisperPrompt.IntendedModeTokens),
             tokenizer.IdOf(WhisperPrompt.EndOfTextToken),
             suppress,
             beginSuppress,
