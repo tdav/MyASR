@@ -14,38 +14,46 @@ partial class DownloadForm
     {
         _label = new Label();
         _progress = new ProgressBar();
-        _detail = new Label();
+        _detail = new TextBox();
         _retry = new Button();
         SuspendLayout();
         // 
         // _label
         // 
-        _label.AutoEllipsis = true;
-        _label.Location = new Point(16, 21);
+        // Two lines, wrapping rather than ellipsing: the failure text is the only thing that
+        // tells the user what to do, so truncating it defeats the dialog's purpose.
+        _label.Location = new Point(16, 15);
         _label.Name = "_label";
-        _label.Size = new Size(223, 24);
+        _label.Size = new Size(412, 36);
         _label.TabIndex = 0;
         _label.Text = "Подготовка...";
-        // 
+        //
         // _progress
-        // 
-        _progress.Location = new Point(16, 55);
+        //
+        _progress.Location = new Point(16, 57);
         _progress.Name = "_progress";
-        _progress.Size = new Size(329, 24);
+        _progress.Size = new Size(524, 24);
         _progress.Style = ProgressBarStyle.Continuous;
         _progress.TabIndex = 1;
-        // 
+        //
         // _detail
-        // 
+        //
+        // Read-only text box rather than a label: on failure this carries the source path, which
+        // is both long enough to need several lines and the one thing worth copying.
+        _detail.BackColor = SystemColors.Control;
+        _detail.BorderStyle = BorderStyle.None;
         _detail.ForeColor = SystemColors.GrayText;
-        _detail.Location = new Point(16, 84);
+        _detail.Location = new Point(16, 89);
+        _detail.Multiline = true;
         _detail.Name = "_detail";
-        _detail.Size = new Size(329, 18);
+        _detail.ReadOnly = true;
+        _detail.ScrollBars = ScrollBars.Vertical;
+        _detail.Size = new Size(524, 56);
         _detail.TabIndex = 2;
-        // 
+        //
         // _retry
-        // 
-        _retry.Location = new Point(245, 15);
+        //
+        _retry.Location = new Point(440, 15);
         _retry.Name = "_retry";
         _retry.Size = new Size(100, 30);
         _retry.TabIndex = 3;
@@ -56,7 +64,7 @@ partial class DownloadForm
         // 
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(364, 110);
+        ClientSize = new Size(556, 157);
         Controls.Add(_label);
         Controls.Add(_progress);
         Controls.Add(_detail);
@@ -73,6 +81,6 @@ partial class DownloadForm
 
     private Label _label;
     private ProgressBar _progress;
-    private Label _detail;
+    private TextBox _detail;
     private Button _retry;
 }

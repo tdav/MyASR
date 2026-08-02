@@ -8,6 +8,34 @@ public class DownloadProgressFormattingTests
     private static readonly ModelDescriptor Model = ModelCatalog.GigaAmV3;
 
     [Test]
+    public async Task FailureDetail_KeepsTheSourcePath_TheUserNeedsToSee()
+    {
+        var ex = new FileNotFoundException(
+            @"Файл модели не найден в источнике: C:\Users\x\AppData\Local\MyASR\model-sources\m\encoder_model.onnx");
+
+        var detail = DownloadProgressFormatter.FailureDetail(ModelCatalog.CrisperWhisperSmallInt8, ex);
+
+        await Assert.That(detail).Contains(@"C:\Users\x\AppData\Local\MyASR\model-sources\m\encoder_model.onnx");
+    }
+
+    [Test]
+    public async Task FailureDetail_NamesTheOverrideVariableForThatModel()
+    {
+        var detail = DownloadProgressFormatter.FailureDetail(
+            ModelCatalog.CrisperWhisperSmallInt8, new IOException("boom"));
+
+        await Assert.That(detail).Contains("MYASR_MODEL_SOURCE_CRISPERWHISPER2_SMALL_INT8");
+        await Assert.That(detail).Contains("boom");
+    }
+
+    [Test]
+    public async Task FailureDetail_UsesTheVariableOfTheFailingModel_NotADefault()
+    {
+        var detail = DownloadProgressFormatter.FailureDetail(ModelCatalog.GigaAmV3, new IOException("boom"));
+        await Assert.That(detail).Contains("MYASR_MODEL_SOURCE_GIGAAM_V3_RNNT");
+    }
+
+    [Test]
     public async Task Line_ShowsModelName_FileName_AndMegabytes()
     {
         var p = new DownloadProgress("v3_rnnt_encoder.onnx", 50_000_000, 928_000_000, 0, 0, 4);
