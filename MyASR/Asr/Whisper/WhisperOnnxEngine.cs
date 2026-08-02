@@ -17,7 +17,7 @@ public sealed class WhisperOnnxEngine : IAsrEngine
     private readonly WhisperFeatureExtractor features;
     private readonly WhisperTokenizer tokenizer;
     private readonly InferenceSession encoder;
-    private readonly string decoderPath;
+    private readonly InferenceSession decoder;
     private readonly SessionOptions options;
     private readonly int[] prompt;
     private readonly int eotId;
@@ -29,7 +29,7 @@ public sealed class WhisperOnnxEngine : IAsrEngine
         WhisperFeatureExtractor features,
         WhisperTokenizer tokenizer,
         InferenceSession encoder,
-        string decoderPath,
+        InferenceSession decoder,
         SessionOptions options,
         int[] prompt,
         int eotId,
@@ -40,7 +40,7 @@ public sealed class WhisperOnnxEngine : IAsrEngine
         this.features = features;
         this.tokenizer = tokenizer;
         this.encoder = encoder;
-        this.decoderPath = decoderPath;
+        this.decoder = decoder;
         this.options = options;
         this.prompt = prompt;
         this.eotId = eotId;
@@ -59,27 +59,44 @@ public sealed class WhisperOnnxEngine : IAsrEngine
             IntraOpNumThreads = Math.Max(1, Environment.ProcessorCount / 2)
         };
 
-        var tokenizer = WhisperTokenizer.Load(
-            paths.File(CrisperWhisperFiles.Vocab),
-            paths.File(CrisperWhisperFiles.AddedTokens));
+        // Both sessions, and any resource created after them, must be released if a later step
+        // throws (malformed generation_config.json, a missing special token, a corrupt encoder
+        // or decoder file) — otherwise a partially-constructed engine leaks native handles.
+        InferenceSession? encoder = null;
+        InferenceSession? decoder = null;
+        try
+        {
+            var tokenizer = WhisperTokenizer.Load(
+                paths.File(CrisperWhisperFiles.Vocab),
+                paths.File(CrisperWhisperFiles.AddedTokens));
 
-        var encoder = new InferenceSession(paths.File(CrisperWhisperFiles.Encoder), options);
-        var dModel = encoder.OutputMetadata.Values.First().Dimensions[^1];
-        if (dModel <= 0) dModel = 768;
+            encoder = new InferenceSession(paths.File(CrisperWhisperFiles.Encoder), options);
+            var dModel = encoder.OutputMetadata.Values.First().Dimensions[^1];
+            if (dModel <= 0) dModel = 768;
 
-        var (suppress, beginSuppress) = LoadSuppression(paths.File(CrisperWhisperFiles.GenerationConfig));
+            decoder = new InferenceSession(paths.File(CrisperWhisperFiles.DecoderMerged), options);
 
-        return new WhisperOnnxEngine(
-            new WhisperFeatureExtractor(),
-            tokenizer,
-            encoder,
-            paths.File(CrisperWhisperFiles.DecoderMerged),
-            options,
-            WhisperPrompt.Build(tokenizer, WhisperPrompt.RussianToken, WhisperPrompt.IntendedModeTokens),
-            tokenizer.IdOf(WhisperPrompt.EndOfTextToken),
-            suppress,
-            beginSuppress,
-            dModel);
+            var (suppress, beginSuppress) = LoadSuppression(paths.File(CrisperWhisperFiles.GenerationConfig));
+
+            return new WhisperOnnxEngine(
+                new WhisperFeatureExtractor(),
+                tokenizer,
+                encoder,
+                decoder,
+                options,
+                WhisperPrompt.Build(tokenizer, WhisperPrompt.RussianToken, WhisperPrompt.IntendedModeTokens),
+                tokenizer.IdOf(WhisperPrompt.EndOfTextToken),
+                suppress,
+                beginSuppress,
+                dModel);
+        }
+        catch
+        {
+            decoder?.Dispose();
+            encoder?.Dispose();
+            options.Dispose();
+            throw;
+        }
     }
 
     internal static (HashSet<int> suppress, HashSet<int> beginSuppress) LoadSuppression(string generationConfigPath)
@@ -108,8 +125,9 @@ public sealed class WhisperOnnxEngine : IAsrEngine
         var mel = features.Extract(pcm16kMono);
         var encoded = RunEncoder(mel);
 
-        using var step = new WhisperOnnxDecoderStep(
-            new InferenceSession(decoderPath, options), encoded, EncoderFrames, dModel);
+        // The decoder session is long-lived and shared across utterances; a fresh
+        // WhisperOnnxDecoderStep is still created per call so its KV cache starts empty.
+        var step = new WhisperOnnxDecoderStep(decoder, encoded, EncoderFrames, dModel);
 
         var ids = WhisperGreedyLoop.Run(
             step, prompt, eotId, suppress, beginSuppress, MaxTargetPositions);
@@ -136,6 +154,7 @@ public sealed class WhisperOnnxEngine : IAsrEngine
 
     public void Dispose()
     {
+        decoder.Dispose();
         encoder.Dispose();
         options.Dispose();
     }

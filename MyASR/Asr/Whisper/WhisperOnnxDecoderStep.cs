@@ -8,7 +8,14 @@ namespace MyASR.Asr.Whisper;
 /// with-cache branch selected by <c>use_cache_branch</c>; the no-cache pass still requires the
 /// past inputs to be present, so it gets zero-length tensors.
 /// </summary>
-public sealed class WhisperOnnxDecoderStep : IWhisperDecoderStep, IDisposable
+/// <remarks>
+/// The <see cref="InferenceSession"/> is owned by the caller (<see cref="WhisperOnnxEngine"/>)
+/// and outlives any single instance of this type — an <c>InferenceSession</c> carries no
+/// per-call state between <c>Run</c> invocations, so sharing it across utterances is safe. The
+/// only state that must not leak between utterances is the KV <see cref="cache"/> below, which
+/// is why callers must construct a fresh <see cref="WhisperOnnxDecoderStep"/> per utterance.
+/// </remarks>
+public sealed class WhisperOnnxDecoderStep : IWhisperDecoderStep
 {
     private const string InputIds = "input_ids";
     private const string EncoderHiddenStates = "encoder_hidden_states";
@@ -99,12 +106,19 @@ public sealed class WhisperOnnxDecoderStep : IWhisperDecoderStep, IDisposable
 
     private DenseTensor<float> PastFor(string name, bool firstStep)
     {
-        if (!firstStep && cache.TryGetValue(name, out var cached)) return cached;
+        if (!firstStep)
+        {
+            if (cache.TryGetValue(name, out var cached)) return cached;
+
+            // A miss here on a non-first step means the KV cache is missing an entry that the
+            // with-cache branch needs — feeding a zero-length fallback would silently degrade
+            // into fluent nonsense instead of failing, which is the trap this guards against.
+            throw new InvalidOperationException(
+                $"В кэше декодера отсутствует тензор \"{name}\" на шаге, отличном от первого.");
+        }
 
         // The no-cache branch still requires every past input to be present, so it gets
         // zero-length tensors for both the decoder and the encoder side.
         return new DenseTensor<float>(Array.Empty<float>(), [1, numHeads, 0, headDim]);
     }
-
-    public void Dispose() => session.Dispose();
 }
