@@ -21,6 +21,17 @@ public class ModelProviderTests
         public string ResolveBaseUri(ModelDescriptor model) => baseUri;
     }
 
+    /// <summary>
+    /// Unlike <see cref="Progress{T}"/>, which marshals its callback through the captured
+    /// <see cref="SynchronizationContext"/> (or the thread pool when there is none) and only
+    /// guarantees eventual delivery, this invokes the handler inline and synchronously on the
+    /// calling thread so post-await assertions can rely on every report having already happened.
+    /// </summary>
+    private sealed class SynchronousProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        public void Report(T value) => handler(value);
+    }
+
     private static string NewTempDir()
     {
         var tmp = Path.Combine(Path.GetTempPath(), "MyASR-tests-" + Guid.NewGuid());
@@ -133,7 +144,7 @@ public class ModelProviderTests
             var provider = new ModelProvider(new HttpClient(), new FixedSource(src));
 
             await provider.EnsureDownloadedAsync(
-                paths, new Progress<DownloadProgress>(seen.Add), CancellationToken.None);
+                paths, new SynchronousProgress<DownloadProgress>(seen.Add), CancellationToken.None);
 
             await Assert.That(File.Exists(paths.File("weights.bin"))).IsTrue();
             await Assert.That(new FileInfo(paths.File("weights.bin")).Length).IsEqualTo(8L);
