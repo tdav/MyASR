@@ -13,7 +13,11 @@ public class ModelSourceResolverTests
             .IsEqualTo("MYASR_MODEL_SOURCE_CRISPERWHISPER2_SMALL_INT8");
     }
 
+    // Every test whose expectation depends on MYASR_MODEL_SOURCE_GIGAAM_V3_RNNT being unset shares
+    // the mutex with the test that sets it. Without this they run alongside it, read the variable
+    // mid-flight and fail — the environment is process-global state, not per-test state.
     [Test]
+    [NotInParallel("env-var-mutex")]
     public async Task NoOverrides_ReturnsDescriptorDefault()
     {
         var resolver = new ModelSourceResolver(null);
@@ -21,6 +25,7 @@ public class ModelSourceResolverTests
     }
 
     [Test]
+    [NotInParallel("env-var-mutex")]
     public async Task SettingsOverride_BeatsDefault()
     {
         var resolver = new ModelSourceResolver(new Dictionary<string, string>
@@ -31,6 +36,7 @@ public class ModelSourceResolverTests
     }
 
     [Test]
+    [NotInParallel("env-var-mutex")]
     public async Task BlankSettingsValue_IsIgnored()
     {
         var resolver = new ModelSourceResolver(new Dictionary<string, string> { [Model.Id] = "  " });
@@ -56,6 +62,7 @@ public class ModelSourceResolverTests
     }
 
     [Test]
+    [NotInParallel("env-var-mutex")]
     public async Task SettingsForAnotherModel_DoNotLeak()
     {
         var resolver = new ModelSourceResolver(new Dictionary<string, string> { ["some-other-id"] = @"D:\x" });
