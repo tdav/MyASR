@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MyASR.Asr;
 using MyASR.Audio;
@@ -25,14 +24,25 @@ public partial class Main : Form
     private readonly uint _hotkeyMod;
     private readonly uint _hotkeyVk;
 
-    private readonly IServiceProvider sp;
     private readonly IAsrService asr;
     private readonly IMicCapture mic;
     private readonly IModelProvider modelProvider;
-    private readonly ModelPaths paths;
+    private readonly Func<ModelDescriptor, ModelPaths> pathsFor;
+    private readonly Func<ModelDescriptor, DownloadForm> downloadFormFor;
     private readonly IHotkeyManager hotkeys;
     private readonly ILogger<Main>? logger;
     private readonly UserSettings settings = UserSettings.Load();
+
+    private ModelDescriptor selectedModel = ModelCatalog.Default;
+    private bool suppressModelComboEvent;
+    private bool hotkeyRegistered;
+
+    // Gates recording start (mic button and global hotkey alike) while a model switch — including
+    // its modal download dialog — is in flight, and permanently once no model could be kept loaded
+    // (see modelUnavailable). UI-thread flags, not concurrency primitives; AsrService already
+    // serialises the engine paths internally.
+    private bool modelSwitchInProgress;
+    private bool modelUnavailable;
 
     private readonly System.Windows.Forms.Timer vuTimer = new() { Interval = 33 };
     private readonly System.Windows.Forms.Timer hotkeyPoll = new() { Interval = 16 };
@@ -45,21 +55,23 @@ public partial class Main : Form
     public Main()
     {
         InitializeComponent();
-        sp = null!; asr = null!; mic = null!;
-        modelProvider = null!; paths = null!; hotkeys = null!;
+        asr = null!; mic = null!;
+        modelProvider = null!; pathsFor = null!; downloadFormFor = null!; hotkeys = null!;
     }
 
     public Main(
-        IServiceProvider sp,
         IAsrService asr,
         IMicCapture mic,
         IModelProvider modelProvider,
-        ModelPaths paths,
+        Func<ModelDescriptor, ModelPaths> pathsFor,
+        Func<ModelDescriptor, DownloadForm> downloadFormFor,
         IHotkeyManager hotkeys,
         ILogger<Main>? logger = null) : this()
     {
-        this.sp = sp; this.asr = asr; this.mic = mic;
-        this.modelProvider = modelProvider; this.paths = paths;
+        this.asr = asr; this.mic = mic;
+        this.modelProvider = modelProvider;
+        this.pathsFor = pathsFor;
+        this.downloadFormFor = downloadFormFor;
         this.hotkeys = hotkeys; this.logger = logger;
 
         const string DefaultHotkey = "Ctrl+Shift+X";
@@ -86,6 +98,8 @@ public partial class Main : Form
         copyBtn.Click += (_, _) => CopyToClipboard();
         saveTxtBtn.Click += (_, _) => SaveAsTxt();
 
+        modelCombo.SelectedIndexChanged += async (_, _) => await OnModelSelectedAsync();
+
         Shown += async (_, _) => await OnFormShownAsync();
         FormClosed += (_, _) => Cleanup();
     }
@@ -102,41 +116,25 @@ public partial class Main : Form
             if (idx >= 0) _deviceCombo.SelectedIndex = idx;
         }
 
+        selectedModel = ModelCatalog.ById(settings.ModelId);
+        PopulateModels();
+
         micButton.Enabled = false;
 
-        if (!modelProvider.AreModelsAvailable(paths))
-        {
-            statusLabel.Text = "⏬ Загрузка моделей...";
-            using var dlg = sp.GetRequiredService<DownloadForm>();
-            if (dlg.ShowDialog(this) != DialogResult.OK)
-            {
-                MessageBox.Show("Модели не загружены — приложение будет закрыто.",
-                                "MyASR", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                Close();
-                return;
-            }
-        }
+        LegacyModelLayout.Migrate(ModelRoot.Resolve(), ModelCatalog.GigaAmV3, logger);
 
-        statusLabel.Text = "⏳ Загрузка модели в память...";
-        UseWaitCursor = true;
-        Refresh();
-        try
+        if (!await EnsureModelPresentAsync(selectedModel))
         {
-            await asr.WarmupAsync();
-        }
-        catch (Exception ex)
-        {
-            logger?.LogError(ex, "Model warmup failed");
-            UseWaitCursor = false;
-            MessageBox.Show($"Не удалось загрузить ONNX-модели:\n{ex.Message}",
-                            "MyASR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show("Модель не загружена — приложение будет закрыто.",
+                            "MyASR", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             Close();
             return;
         }
-        UseWaitCursor = false;
 
-        var registered = hotkeys.Register(Handle, HotkeyId, _hotkeyMod, _hotkeyVk);
-        if (!registered)
+        if (!await WarmUpAsync(selectedModel, closeOnFailure: true)) return;
+
+        hotkeyRegistered = hotkeys.Register(Handle, HotkeyId, _hotkeyMod, _hotkeyVk);
+        if (!hotkeyRegistered)
         {
             logger?.LogWarning("Не удалось зарегистрировать глобальный хоткей {Hotkey}", settings.Hotkey);
             MessageBox.Show(
@@ -147,23 +145,164 @@ public partial class Main : Form
         }
         hotkeyPoll.Start();
         micButton.Enabled = true;
-        statusLabel.Text = registered
-            ? $"● Idle (PTT: {settings.Hotkey})"
-            : "● Idle (PTT недоступен — занят)";
+        UpdateModelStatus();
 
         if (!StartupManager.IsEnabled())
             StartupManager.SetEnabled(true);
+    }
+
+    private void PopulateModels()
+    {
+        suppressModelComboEvent = true;
+        modelCombo.DataSource = ModelCatalog.All.ToList();
+        modelCombo.DisplayMember = nameof(ModelDescriptor.DisplayName);
+        modelCombo.SelectedIndex = Math.Max(0, ModelSelectionPolicy.IndexOf(ModelCatalog.All, selectedModel.Id));
+        suppressModelComboEvent = false;
+    }
+
+    /// <returns>true when every file of <paramref name="model"/> is on disk afterwards.</returns>
+    private async Task<bool> EnsureModelPresentAsync(ModelDescriptor model)
+    {
+        try
+        {
+            var paths = pathsFor(model);
+            if (modelProvider.AreModelsAvailable(paths)) return true;
+
+            statusLabel.Text = $"⏬ Загрузка модели «{model.DisplayName}»...";
+            using var dlg = downloadFormFor(model);
+            var ok = dlg.ShowDialog(this) == DialogResult.OK;
+            await Task.Yield(); // let the dialog finish tearing down before the caller continues
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogError(ex, "Failed to ensure model present for {ModelId}", model.Id);
+            MessageBox.Show($"Не удалось подготовить модель «{model.DisplayName}»:\n{ex.Message}",
+                            "MyASR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
+    }
+
+    private async Task<bool> WarmUpAsync(ModelDescriptor model, bool closeOnFailure)
+    {
+        statusLabel.Text = $"⏳ Загрузка «{model.DisplayName}» в память...";
+        UseWaitCursor = true;
+        Refresh();
+        try
+        {
+            if (asr.CurrentModel.Id == model.Id)
+                await asr.WarmupAsync();
+            else
+                await asr.SwitchModelAsync(model, CancellationToken.None);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogError(ex, "Model warmup failed for {ModelId}", model.Id);
+            MessageBox.Show($"Не удалось загрузить модель «{model.DisplayName}»:\n{ex.Message}",
+                            "MyASR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            if (closeOnFailure) Close();
+            return false;
+        }
+        finally
+        {
+            UseWaitCursor = false;
+        }
+    }
+
+    private async Task OnModelSelectedAsync()
+    {
+        if (suppressModelComboEvent) return;
+        if (modelCombo.SelectedItem is not ModelDescriptor chosen) return;
+        if (chosen.Id == selectedModel.Id) return;
+
+        if (!ModelSelectionPolicy.CanSwitch(asr.State))
+        {
+            statusLabel.Text = "Модель нельзя менять во время записи или распознавания.";
+            RevertModelCombo();
+            return;
+        }
+
+        var previous = selectedModel;
+        modelSwitchInProgress = true;
+        micButton.Enabled = false;
+        try
+        {
+            if (!await EnsureModelPresentAsync(chosen))
+            {
+                // Download was cancelled or failed — nothing was ever unloaded, `previous` is
+                // still the live engine, so there is nothing to reload. Just put the combo back.
+                RevertModelCombo();
+                return;
+            }
+
+            if (!await WarmUpAsync(chosen, closeOnFailure: false))
+            {
+                RevertModelCombo();
+                if (!await WarmUpAsync(previous, closeOnFailure: false))
+                {
+                    // The revert itself failed: SwitchModelAsync already disposed the outgoing
+                    // engine and left the cache empty when it tried to load `chosen`, and now
+                    // rebuilding `previous` has failed too. The service has no working engine —
+                    // update the UI to say so plainly instead of letting the status bar and mic
+                    // button keep claiming `previous` is loaded.
+                    modelUnavailable = true;
+                    UpdateModelStatus();
+                    MessageBox.Show(
+                        $"Не удалось восстановить модель «{previous.DisplayName}» после неудачного переключения.\n" +
+                        "Сейчас не загружена ни одна модель — распознавание невозможно.\n" +
+                        "Проверьте файлы модели и свободное место на диске, затем перезапустите приложение.",
+                        "MyASR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                return;
+            }
+
+            selectedModel = chosen;
+            modelUnavailable = false;
+            settings.ModelId = chosen.Id;
+            settings.Save();
+        }
+        finally
+        {
+            modelSwitchInProgress = false;
+            micButton.Enabled = !modelUnavailable;
+            UpdateModelStatus();
+        }
+    }
+
+    private void RevertModelCombo()
+    {
+        suppressModelComboEvent = true;
+        modelCombo.SelectedIndex = Math.Max(0, ModelSelectionPolicy.IndexOf(ModelCatalog.All, selectedModel.Id));
+        suppressModelComboEvent = false;
+    }
+
+    private void UpdateModelStatus()
+    {
+        if (modelUnavailable)
+        {
+            statusLabel.Text = ModelSelectionPolicy.NoModelLoadedStatusText();
+            _modelLabel.Text = "—";
+            return;
+        }
+        statusLabel.Text = ModelSelectionPolicy.StatusText(selectedModel, hotkeyRegistered, settings.Hotkey);
+        _modelLabel.Text = selectedModel.DisplayName;
     }
 
     protected override void WndProc(ref Message m)
     {
         if (m.Msg == WM_HOTKEY && (int)m.WParam == HotkeyId)
         {
-            if (asr.State == AsrState.Idle && !hotkeyDownPrev)
+            if (CanStartRecording() && !hotkeyDownPrev)
                 StartRecording();
         }
         base.WndProc(ref m);
     }
+
+    // Shared by the global-hotkey path above and StartRecording below, so a push-to-talk press
+    // can never begin capture while a model switch (including its modal download dialog) is in
+    // flight, or once no model could be kept loaded at all.
+    private bool CanStartRecording() => asr.State == AsrState.Idle && !modelSwitchInProgress && !modelUnavailable;
 
     private void PollHotkey()
     {
@@ -180,7 +319,7 @@ public partial class Main : Form
 
     private void StartRecording()
     {
-        if (asr.State != AsrState.Idle) return;
+        if (!CanStartRecording()) return;
         if (_deviceCombo.SelectedItem is not DeviceInfo dev) return;
         asr.StartCapture(dev.Id);
         recordingTimer.Restart();
@@ -200,9 +339,9 @@ public partial class Main : Form
     private void OnStateChanged(AsrStateChanged s)
     {
         if (InvokeRequired) { BeginInvoke(() => OnStateChanged(s)); return; }
+        if (s.State == AsrState.Idle) { UpdateModelStatus(); micButton.Enabled = !modelUnavailable; return; }
         statusLabel.Text = s.State switch
         {
-            AsrState.Idle => "● Idle",
             AsrState.Recording => $"⏺ Recording {recordingTimer.Elapsed.TotalSeconds:F1}s",
             AsrState.Decoding => "⏳ Decoding...",
             _ => "?"
@@ -332,6 +471,7 @@ public partial class Main : Form
         hotkeyPoll.Stop();
         maxLengthTimer.Stop();
         if (_deviceCombo.SelectedItem is DeviceInfo dev) settings.MicDeviceId = dev.Id;
+        settings.ModelId = selectedModel.Id;
         settings.GlobalHotkey = true;
         settings.Save();
         hotkeys.Dispose();

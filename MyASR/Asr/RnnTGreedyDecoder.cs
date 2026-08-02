@@ -1,6 +1,5 @@
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
-using MyASR.Models;
 using System.Diagnostics;
 
 namespace MyASR.Asr;
@@ -19,7 +18,7 @@ public sealed class RnnTGreedyDecoder : IRnnTDecoder
     private readonly InferenceSession _joint;
     private readonly Vocabulary _vocab;
 
-    public RnnTGreedyDecoder(ModelPaths paths, Vocabulary vocab)
+    public RnnTGreedyDecoder(string encoderPath, string decoderPath, string jointPath, Vocabulary vocab)
     {
         var opts = new SessionOptions
         {
@@ -28,9 +27,9 @@ public sealed class RnnTGreedyDecoder : IRnnTDecoder
             InterOpNumThreads = 1,
             IntraOpNumThreads = Math.Max(1, Environment.ProcessorCount / 2)
         };
-        _encoder = new InferenceSession(paths.Encoder, opts);
-        _decoder = new InferenceSession(paths.Decoder, opts);
-        _joint   = new InferenceSession(paths.Joint,   opts);
+        _encoder = new InferenceSession(encoderPath, opts);
+        _decoder = new InferenceSession(decoderPath, opts);
+        _joint   = new InferenceSession(jointPath,   opts);
         _vocab   = vocab;
     }
 

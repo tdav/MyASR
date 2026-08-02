@@ -35,7 +35,6 @@ models/
 !MyASR.Tests/Models/
 
 # Test artefacts that are large or generated
-MyASR.Tests/Assets/reference.wav
 MyASR.Tests/Assets/reference_mel.bin
 
 # Logs
@@ -44,3 +43,6 @@ MyASR.Tests/Assets/reference_mel.bin
 # OS
 Thumbs.db
 .DS_Store
+
+# Superpowers SDD scratch
+.superpowers/

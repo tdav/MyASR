@@ -2,19 +2,19 @@ using System.IO;
 
 namespace MyASR.Models;
 
-public sealed class ModelPaths(string root)
+/// <summary>Locates one model's files inside its own folder under the models root.</summary>
+public sealed class ModelPaths
 {
-    public string Root { get; } = root;
-    public string Encoder => Path.Combine(Root, "v3_rnnt_encoder.onnx");
-    public string Decoder => Path.Combine(Root, "v3_rnnt_decoder.onnx");
-    public string Joint   => Path.Combine(Root, "v3_rnnt_joint.onnx");
-    public string Vocab   => Path.Combine(Root, "v3_vocab.txt");
-
-    public static ModelPaths Default()
+    public ModelPaths(string root, ModelDescriptor model)
     {
-        var env = Environment.GetEnvironmentVariable("MYASR_MODELS_DIR");
-        if (!string.IsNullOrWhiteSpace(env)) return new ModelPaths(env);
-        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return new ModelPaths(Path.Combine(local, "MyASR", "models"));
+        Model = model;
+        Root = Path.Combine(root, model.FolderName);
     }
+
+    public ModelDescriptor Model { get; }
+
+    /// <summary>Absolute path of this model's own folder.</summary>
+    public string Root { get; }
+
+    public string File(string localName) => Path.Combine(Root, localName);
 }

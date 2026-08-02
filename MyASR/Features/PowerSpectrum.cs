@@ -3,7 +3,7 @@ using SystemComplex = System.Numerics.Complex;
 
 namespace MyASR.Features;
 
-internal static class PowerSpectrum
+public static class PowerSpectrum
 {
     /// <summary>
     /// Computes |FFT(x ∘ window)|² for a single frame and writes <c>nFft/2 + 1</c> bins to <paramref name="output"/>.
@@ -32,6 +32,18 @@ internal static class PowerSpectrum
         var w = new float[n];
         for (var i = 0; i < n; i++)
             w[i] = (float)(0.5 - 0.5 * Math.Cos(2 * Math.PI * i / (n - 1)));
+        return w;
+    }
+
+    /// <summary>
+    /// Periodic Hann window — the convention <c>torch.hann_window</c> uses, and therefore what
+    /// Whisper's STFT expects. <see cref="HanningWindow"/> is the symmetric variant used by GigaAM.
+    /// </summary>
+    public static float[] HannWindowPeriodic(int n)
+    {
+        var w = new float[n];
+        for (var i = 0; i < n; i++)
+            w[i] = (float)(0.5 - 0.5 * Math.Cos(2 * Math.PI * i / n));
         return w;
     }
 }

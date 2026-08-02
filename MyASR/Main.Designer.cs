@@ -13,6 +13,8 @@ partial class Main
     private void InitializeComponent()
     {
         System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Main));
+        modelDescriptionLabel = new Label();
+        modelCombo = new ComboBox();
         _deviceLabel = new Label();
         _deviceCombo = new ComboBox();
         micButton = new Button();
@@ -28,78 +30,94 @@ partial class Main
         _modelLabel = new ToolStripStatusLabel();
         statusStrip1.SuspendLayout();
         SuspendLayout();
-        // 
+        //
+        // modelDescriptionLabel
+        //
+        modelDescriptionLabel.Location = new Point(16, 22);
+        modelDescriptionLabel.Name = "modelDescriptionLabel";
+        modelDescriptionLabel.Size = new Size(80, 16);
+        modelDescriptionLabel.TabIndex = 0;
+        modelDescriptionLabel.Text = "Модель:";
+        //
+        // modelCombo
+        //
+        modelCombo.DropDownStyle = ComboBoxStyle.DropDownList;
+        modelCombo.Location = new Point(102, 19);
+        modelCombo.Name = "modelCombo";
+        modelCombo.Size = new Size(574, 23);
+        modelCombo.TabIndex = 1;
+        //
         // _deviceLabel
-        // 
-        _deviceLabel.Location = new Point(16, 22);
+        //
+        _deviceLabel.Location = new Point(16, 51);
         _deviceLabel.Name = "_deviceLabel";
         _deviceLabel.Size = new Size(80, 16);
-        _deviceLabel.TabIndex = 0;
+        _deviceLabel.TabIndex = 2;
         _deviceLabel.Text = "Микрофон:";
-        // 
+        //
         // _deviceCombo
-        // 
+        //
         _deviceCombo.DropDownStyle = ComboBoxStyle.DropDownList;
-        _deviceCombo.Location = new Point(102, 19);
+        _deviceCombo.Location = new Point(102, 48);
         _deviceCombo.Name = "_deviceCombo";
         _deviceCombo.Size = new Size(574, 23);
-        _deviceCombo.TabIndex = 1;
-        // 
+        _deviceCombo.TabIndex = 3;
+        //
         // micButton
-        // 
-        micButton.Location = new Point(16, 51);
+        //
+        micButton.Location = new Point(16, 80);
         micButton.Name = "micButton";
         micButton.Size = new Size(160, 29);
         micButton.TabIndex = 4;
         micButton.Text = "Hold";
-        // 
+        //
         // _vuMeter
-        // 
+        //
         _vuMeter.BorderStyle = BorderStyle.FixedSingle;
-        _vuMeter.Location = new Point(186, 54);
+        _vuMeter.Location = new Point(186, 83);
         _vuMeter.Name = "_vuMeter";
         _vuMeter.Size = new Size(490, 23);
         _vuMeter.TabIndex = 5;
         _vuMeter.Paint += OnVuPaint;
-        // 
+        //
         // resultBox
-        // 
+        //
         resultBox.Font = new Font("Segoe UI", 10F);
-        resultBox.Location = new Point(16, 93);
+        resultBox.Location = new Point(16, 122);
         resultBox.Name = "resultBox";
         resultBox.ReadOnly = true;
         resultBox.Size = new Size(660, 272);
         resultBox.TabIndex = 6;
         resultBox.Text = "";
-        // 
+        //
         // clearBtn
-        // 
-        clearBtn.Location = new Point(16, 377);
+        //
+        clearBtn.Location = new Point(16, 406);
         clearBtn.Name = "clearBtn";
         clearBtn.Size = new Size(100, 30);
         clearBtn.TabIndex = 7;
         clearBtn.Text = "Очистить";
-        // 
+        //
         // copyBtn
-        // 
-        copyBtn.Location = new Point(124, 377);
+        //
+        copyBtn.Location = new Point(124, 406);
         copyBtn.Name = "copyBtn";
         copyBtn.Size = new Size(120, 30);
         copyBtn.TabIndex = 8;
         copyBtn.Text = "Скопировать";
-        // 
+        //
         // saveTxtBtn
-        // 
-        saveTxtBtn.Location = new Point(252, 377);
+        //
+        saveTxtBtn.Location = new Point(252, 406);
         saveTxtBtn.Name = "saveTxtBtn";
         saveTxtBtn.Size = new Size(140, 30);
         saveTxtBtn.TabIndex = 9;
         saveTxtBtn.Text = "Сохранить TXT...";
-        // 
+        //
         // statusStrip1
-        // 
+        //
         statusStrip1.Items.AddRange(new ToolStripItem[] { statusLabel, _vuLabel, toolStripStatusLabel1, _modelLabel });
-        statusStrip1.Location = new Point(0, 422);
+        statusStrip1.Location = new Point(0, 451);
         statusStrip1.Name = "statusStrip1";
         statusStrip1.Size = new Size(689, 22);
         statusStrip1.TabIndex = 10;
@@ -130,13 +148,15 @@ partial class Main
         _modelLabel.ForeColor = SystemColors.GrayText;
         _modelLabel.Name = "_modelLabel";
         _modelLabel.Size = new Size(114, 17);
-        _modelLabel.Text = "Model: v3_rnnt FP32";
+        _modelLabel.Text = "—";
         // 
         // Main
         // 
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(689, 444);
+        ClientSize = new Size(689, 473);
+        Controls.Add(modelDescriptionLabel);
+        Controls.Add(modelCombo);
         Controls.Add(_deviceLabel);
         Controls.Add(_deviceCombo);
         Controls.Add(micButton);
@@ -170,4 +190,6 @@ partial class Main
     private ToolStripStatusLabel _modelLabel;
     private StatusStrip statusStrip1;
     private ToolStripStatusLabel toolStripStatusLabel1;
+    private Label modelDescriptionLabel;
+    private ComboBox modelCombo;
 }

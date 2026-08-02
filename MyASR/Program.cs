@@ -1,8 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MyASR.Asr;
+using MyASR.Asr.Whisper;
 using MyASR.Audio;
-using MyASR.Features;
 using MyASR.Hotkeys;
 using MyASR.Models;
 using System.IO;
@@ -25,30 +25,38 @@ internal static class Program
         });
 
         services.AddSingleton<HttpClient>();
-        services.AddSingleton<IReadOnlyList<ModelFileEntry>>(_ => ModelManifest.Files);
-        services.AddSingleton<ModelPaths>(_ => ModelPaths.Default());
-        services.AddSingleton<IModelProvider, HuggingFaceModelProvider>();
+        services.AddSingleton<IModelSourceResolver>(_ =>
+            new ModelSourceResolver(UserSettings.Load().ModelSources));
+        services.AddSingleton<IModelProvider, ModelProvider>();
+        services.AddSingleton<Func<ModelDescriptor, ModelPaths>>(_ =>
+        {
+            var root = ModelRoot.Resolve();
+            return descriptor => new ModelPaths(root, descriptor);
+        });
         services.AddSingleton<IMicCapture, WasapiMicCapture>();
-        services.AddSingleton<IFeatureExtractor, MelSpectrogramExtractor>();
         services.AddSingleton<IHotkeyManager, WindowsHotkeyManager>();
 
-        // Decoder is built lazily because it requires model files on disk.
-        services.AddSingleton<Func<IRnnTDecoder>>(sp => () =>
+        // Engines are built lazily because they require model files on disk.
+        services.AddSingleton<Func<ModelDescriptor, IAsrEngine>>(sp =>
         {
-            var paths = sp.GetRequiredService<ModelPaths>();
-            var vocab = Vocabulary.Load(paths.Vocab);
-            return new RnnTGreedyDecoder(paths, vocab);
+            var pathsFor = sp.GetRequiredService<Func<ModelDescriptor, ModelPaths>>();
+            return descriptor => descriptor.Kind switch
+            {
+                AsrEngineKind.RnnT => GigaAmRnnTEngine.Create(pathsFor(descriptor)),
+                AsrEngineKind.Whisper => WhisperOnnxEngine.Create(pathsFor(descriptor)),
+                _ => throw new NotSupportedException($"Движок {descriptor.Kind} ещё не реализован.")
+            };
         });
 
-        services.AddSingleton<IAsrService>(sp =>
-        {
-            var mic     = sp.GetRequiredService<IMicCapture>();
-            var feats   = sp.GetRequiredService<IFeatureExtractor>();
-            var factory = sp.GetRequiredService<Func<IRnnTDecoder>>();
-            return new AsrService(mic, feats, factory);
-        });
+        services.AddSingleton<IAsrService>(sp => new AsrService(
+            sp.GetRequiredService<IMicCapture>(),
+            sp.GetRequiredService<Func<ModelDescriptor, IAsrEngine>>(),
+            ModelCatalog.Default));
 
-        services.AddTransient<DownloadForm>();
+        services.AddSingleton<Func<ModelDescriptor, DownloadForm>>(sp => descriptor => new DownloadForm(
+            sp.GetRequiredService<IModelProvider>(),
+            sp.GetRequiredService<Func<ModelDescriptor, ModelPaths>>()(descriptor),
+            sp.GetService<ILogger<DownloadForm>>()));
         services.AddTransient<Main>();
 
         using var sp = services.BuildServiceProvider();

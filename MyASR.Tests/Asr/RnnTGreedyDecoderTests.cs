@@ -8,9 +8,9 @@ public class RnnTGreedyDecoderTests
 {
     private static bool ModelsPresent()
     {
-        var p = ModelPaths.Default();
-        return File.Exists(p.Encoder) && File.Exists(p.Decoder)
-            && File.Exists(p.Joint)   && File.Exists(p.Vocab);
+        var p = new ModelPaths(ModelRoot.Resolve(), ModelCatalog.Default);
+        return File.Exists(p.File(GigaAmFiles.Encoder)) && File.Exists(p.File(GigaAmFiles.Decoder))
+            && File.Exists(p.File(GigaAmFiles.Joint))   && File.Exists(p.File(GigaAmFiles.Vocab));
     }
 
     [Test]
@@ -26,8 +26,12 @@ public class RnnTGreedyDecoderTests
 
         var pcm   = MyASR.Audio.WavReader.ReadMono16kFloat(wav);
         var mel   = new MelSpectrogramExtractor().Extract(pcm);
-        var paths = ModelPaths.Default();
-        using var dec = new RnnTGreedyDecoder(paths, Vocabulary.Load(paths.Vocab));
+        var paths = new ModelPaths(ModelRoot.Resolve(), ModelCatalog.Default);
+        using var dec = new RnnTGreedyDecoder(
+            paths.File(GigaAmFiles.Encoder),
+            paths.File(GigaAmFiles.Decoder),
+            paths.File(GigaAmFiles.Joint),
+            Vocabulary.Load(paths.File(GigaAmFiles.Vocab)));
         var res = dec.Decode(mel, TimeSpan.FromSeconds(pcm.Length / 16000.0));
 
         await Assert.That(res.Text).IsNotEmpty();
