@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MyASR.Asr;
+using MyASR.Asr.Whisper;
 using MyASR.Audio;
 using MyASR.Hotkeys;
 using MyASR.Models;
@@ -42,6 +43,7 @@ internal static class Program
             return descriptor => descriptor.Kind switch
             {
                 AsrEngineKind.RnnT => GigaAmRnnTEngine.Create(pathsFor(descriptor)),
+                AsrEngineKind.Whisper => WhisperOnnxEngine.Create(pathsFor(descriptor)),
                 _ => throw new NotSupportedException($"Движок {descriptor.Kind} ещё не реализован.")
             };
         });
