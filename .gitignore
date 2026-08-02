@@ -44,3 +44,6 @@ MyASR.Tests/Assets/reference_mel.bin
 # OS
 Thumbs.db
 .DS_Store
+
+# Superpowers SDD scratch
+.superpowers/
