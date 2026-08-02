@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MyASR.Asr;
 using MyASR.Audio;
-using MyASR.Features;
 using MyASR.Hotkeys;
 using MyASR.Models;
 using System.IO;
@@ -35,28 +34,23 @@ internal static class Program
         services.AddSingleton<ModelPaths>(sp =>
             sp.GetRequiredService<Func<ModelDescriptor, ModelPaths>>()(ModelCatalog.Default));
         services.AddSingleton<IMicCapture, WasapiMicCapture>();
-        services.AddSingleton<IFeatureExtractor, MelSpectrogramExtractor>();
         services.AddSingleton<IHotkeyManager, WindowsHotkeyManager>();
 
-        // Decoder is built lazily because it requires model files on disk.
-        services.AddSingleton<Func<IRnnTDecoder>>(sp => () =>
+        // Engines are built lazily because they require model files on disk.
+        services.AddSingleton<Func<ModelDescriptor, IAsrEngine>>(sp =>
         {
-            var paths = sp.GetRequiredService<ModelPaths>();
-            var vocab = Vocabulary.Load(paths.File(GigaAmFiles.Vocab));
-            return new RnnTGreedyDecoder(
-                paths.File(GigaAmFiles.Encoder),
-                paths.File(GigaAmFiles.Decoder),
-                paths.File(GigaAmFiles.Joint),
-                vocab);
+            var pathsFor = sp.GetRequiredService<Func<ModelDescriptor, ModelPaths>>();
+            return descriptor => descriptor.Kind switch
+            {
+                AsrEngineKind.RnnT => GigaAmRnnTEngine.Create(pathsFor(descriptor)),
+                _ => throw new NotSupportedException($"Движок {descriptor.Kind} ещё не реализован.")
+            };
         });
 
-        services.AddSingleton<IAsrService>(sp =>
-        {
-            var mic     = sp.GetRequiredService<IMicCapture>();
-            var feats   = sp.GetRequiredService<IFeatureExtractor>();
-            var factory = sp.GetRequiredService<Func<IRnnTDecoder>>();
-            return new AsrService(mic, feats, factory);
-        });
+        services.AddSingleton<IAsrService>(sp => new AsrService(
+            sp.GetRequiredService<IMicCapture>(),
+            sp.GetRequiredService<Func<ModelDescriptor, IAsrEngine>>(),
+            ModelCatalog.Default));
 
         services.AddTransient<DownloadForm>();
         services.AddTransient<Main>();
