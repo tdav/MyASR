@@ -14,4 +14,20 @@ public static class ModelSelectionPolicy
         var licence = model.LicenceNote is { Length: > 0 } note ? $" ({note})" : "";
         return $"● Idle — {model.DisplayName}{licence} [{ptt}]";
     }
+
+    /// <summary>
+    /// Status text for when no model is loaded at all — e.g. a failed switch whose revert to
+    /// the previous model also failed. Recognition is unavailable until the app is restarted.
+    /// </summary>
+    public static string NoModelLoadedStatusText() =>
+        "⚠ Модель не загружена — распознавание недоступно. " +
+        "Проверьте файлы модели и свободное место на диске, затем перезапустите приложение.";
+
+    /// <summary>Index of the model with the given id in <paramref name="models"/>, or -1 if absent.</summary>
+    public static int IndexOf(IReadOnlyList<ModelDescriptor> models, string modelId)
+    {
+        for (var i = 0; i < models.Count; i++)
+            if (models[i].Id == modelId) return i;
+        return -1;
+    }
 }

@@ -58,4 +58,25 @@ public class ModelSelectionPolicyTests
         await Assert.That(text).IsEqualTo(
             ModelSelectionPolicy.StatusText(ModelCatalog.GigaAmV3, true, "F9"));
     }
+
+    [Test]
+    public async Task NoModelLoadedStatusText_SaysNoModelIsLoaded()
+    {
+        var text = ModelSelectionPolicy.NoModelLoadedStatusText();
+        await Assert.That(text).Contains("не загружена");
+    }
+
+    [Test]
+    public async Task IndexOf_FindsMatchingId()
+    {
+        var idx = ModelSelectionPolicy.IndexOf(ModelCatalog.All, ModelCatalog.GigaAmV3.Id);
+        await Assert.That(idx).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task IndexOf_UnknownId_ReturnsMinusOne()
+    {
+        var idx = ModelSelectionPolicy.IndexOf(ModelCatalog.All, "no-such-model");
+        await Assert.That(idx).IsEqualTo(-1);
+    }
 }
