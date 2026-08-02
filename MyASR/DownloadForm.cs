@@ -27,8 +27,6 @@ public partial class DownloadForm : Form
         FormClosing += (_, _) => cts?.Cancel();
     }
 
-    public bool DownloadSucceeded { get; private set; }
-
     private async Task StartDownloadAsync()
     {
         _retry.Visible = false;
@@ -41,7 +39,6 @@ public partial class DownloadForm : Form
         try
         {
             await provider.EnsureDownloadedAsync(paths, progress, cts.Token);
-            DownloadSucceeded = true;
             DialogResult = DialogResult.OK;
             Close();
         }

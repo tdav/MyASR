@@ -148,7 +148,7 @@ partial class Main
         _modelLabel.ForeColor = SystemColors.GrayText;
         _modelLabel.Name = "_modelLabel";
         _modelLabel.Size = new Size(114, 17);
-        _modelLabel.Text = "Model: v3_rnnt FP32";
+        _modelLabel.Text = "—";
         // 
         // Main
         // 

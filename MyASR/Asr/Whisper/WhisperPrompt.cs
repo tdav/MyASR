@@ -32,9 +32,6 @@ public static class WhisperPrompt
     public static readonly IReadOnlyList<string> IntendedModeTokens =
         ["[intended_1]", "[intended_2]", "[intended_3]", "[intended_4]", "[intended_5]"];
 
-    public static readonly IReadOnlyList<string> VerbatimModeTokens =
-        ["[verbatim_1]", "[verbatim_2]", "[verbatim_3]", "[verbatim_4]", "[verbatim_5]"];
-
     public static WhisperSpecialTokens Resolve(
         WhisperTokenizer tokenizer, string languageToken, IReadOnlyList<string> modeTokens) =>
         new(

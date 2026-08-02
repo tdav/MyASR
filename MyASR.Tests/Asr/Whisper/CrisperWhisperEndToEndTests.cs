@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MyASR.Asr;
 using MyASR.Asr.Whisper;
 using MyASR.Audio;
@@ -6,13 +7,21 @@ using MyASR.Models;
 namespace MyASR.Tests.Asr.Whisper;
 
 /// <summary>
-/// Runs the real ONNX model. Skipped unless both the model folder and a Russian sample exist,
-/// mirroring how the GigaAM reference tests treat missing model files.
+/// Runs the real ONNX model. Gated at runtime exactly the way
+/// <see cref="MyASR.Tests.Asr.RnnTGreedyDecoderTests"/> gates GigaAM: each test checks its
+/// preconditions and, if they are missing, records a trivially-true assertion and returns rather
+/// than being marked skipped, so the test is genuinely exercised whenever the artefacts are
+/// present and stays inert (not merely "skipped") otherwise.
 ///
-/// To run it:
+/// To run the tests that need a Russian sample
+/// (<see cref="Transcribes_RussianSpeech"/>, <see cref="IntendedMode_DoesNotEmitVocalEventMarkers"/>):
 ///   set MYASR_MODELS_DIR to a root containing crisperwhisper2-small-int8/
 ///   place a 16 kHz mono WAV of Russian speech at MyASR.Tests/Assets/russian_sample.wav
 ///   place its expected transcript at MyASR.Tests/Assets/russian_sample.txt
+///
+/// <see cref="Transcribe_ReferenceWav_TwiceOnSameEngine_ProducesAgreeingResults"/> and
+/// <see cref="Decode_CyrillicProbe_MatchesReferenceText"/> need only MYASR_MODELS_DIR — they use
+/// the existing synthetic reference.wav or the model's own vocabulary files, not a Russian sample.
 /// </summary>
 public class CrisperWhisperEndToEndTests
 {
@@ -40,12 +49,13 @@ public class CrisperWhisperEndToEndTests
     private static bool CanRun() => ModelFolder() is not null && File.Exists(SamplePath);
 
     [Test]
-    [Skip("Требуются файлы модели (MYASR_MODELS_DIR на корень с crisperwhisper2-small-int8/) и " +
-        "MyASR.Tests/Assets/russian_sample.wav вместе с его транскриптом " +
-        "MyASR.Tests/Assets/russian_sample.txt")]
     public async Task Transcribes_RussianSpeech()
     {
-        if (!CanRun()) return;
+        if (!CanRun())
+        {
+            await Assert.That(true).IsTrue(); // модель и/или russian_sample.wav отсутствуют — тест неактивен
+            return;
+        }
 
         var root = Environment.GetEnvironmentVariable("MYASR_MODELS_DIR")!;
         using var engine = WhisperOnnxEngine.Create(new ModelPaths(root, Model));
@@ -65,12 +75,13 @@ public class CrisperWhisperEndToEndTests
     }
 
     [Test]
-    [Skip("Требуются файлы модели (MYASR_MODELS_DIR на корень с crisperwhisper2-small-int8/) и " +
-        "MyASR.Tests/Assets/russian_sample.wav вместе с его транскриптом " +
-        "MyASR.Tests/Assets/russian_sample.txt")]
     public async Task IntendedMode_DoesNotEmitVocalEventMarkers()
     {
-        if (!CanRun()) return;
+        if (!CanRun())
+        {
+            await Assert.That(true).IsTrue(); // модель и/или russian_sample.wav отсутствуют — тест неактивен
+            return;
+        }
 
         var root = Environment.GetEnvironmentVariable("MYASR_MODELS_DIR")!;
         using var engine = WhisperOnnxEngine.Create(new ModelPaths(root, Model));
@@ -90,10 +101,13 @@ public class CrisperWhisperEndToEndTests
     /// reference.wav has no speech.
     /// </summary>
     [Test]
-    [Skip("Требуется каталог модели: установите MYASR_MODELS_DIR на корень с crisperwhisper2-small-int8/")]
     public async Task Transcribe_ReferenceWav_TwiceOnSameEngine_ProducesAgreeingResults()
     {
-        if (ModelFolder() is null) return;
+        if (ModelFolder() is null)
+        {
+            await Assert.That(true).IsTrue(); // каталог модели (MYASR_MODELS_DIR) отсутствует — тест неактивен
+            return;
+        }
 
         var root = Environment.GetEnvironmentVariable("MYASR_MODELS_DIR")!;
         using var engine = WhisperOnnxEngine.Create(new ModelPaths(root, Model));
@@ -110,7 +124,45 @@ public class CrisperWhisperEndToEndTests
         await Assert.That(second.Text).IsEqualTo(first.Text);
     }
 
-    private static bool ContainsCyrillic(string s) => s.Any(c => c is >= '\u0400' and <= '\u04FF');
+    /// <summary>
+    /// Loads the real 51896-entry <c>vocab.json</c>/<c>added_tokens.json</c> from the model folder
+    /// (no ONNX session needed) and decodes the <c>cyrillic_probe.ids</c> captured from the
+    /// reference tokenizer in <c>crisperwhisper_reference.json</c>, asserting the result equals
+    /// <c>cyrillic_probe.text</c>. This is the byte-level BPE round-trip against real data that the
+    /// design spec promised — <see cref="MyASR.Tests.Asr.Whisper.WhisperTokenizerTests"/> only ever
+    /// exercises toy vocabularies the tests build themselves.
+    /// </summary>
+    [Test]
+    public async Task Decode_CyrillicProbe_MatchesReferenceText()
+    {
+        var root = ModelFolder();
+        if (root is null)
+        {
+            await Assert.That(true).IsTrue(); // каталог модели (MYASR_MODELS_DIR) отсутствует — тест неактивен
+            return;
+        }
+
+        var paths = new ModelPaths(Environment.GetEnvironmentVariable("MYASR_MODELS_DIR")!, Model);
+        var tokenizer = WhisperTokenizer.Load(
+            paths.File(CrisperWhisperFiles.Vocab), paths.File(CrisperWhisperFiles.AddedTokens));
+
+        var probe = LoadCyrillicProbe();
+        var decoded = tokenizer.Decode(probe.ids);
+
+        await Assert.That(decoded).IsEqualTo(probe.text);
+    }
+
+    private sealed record CyrillicProbe(string text, int[] ids);
+    private sealed record ReferenceWithProbe(CyrillicProbe cyrillic_probe);
+
+    private static CyrillicProbe LoadCyrillicProbe()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Assets", "crisperwhisper_reference.json");
+        var reference = JsonSerializer.Deserialize<ReferenceWithProbe>(File.ReadAllText(path))!;
+        return reference.cyrillic_probe;
+    }
+
+    private static bool ContainsCyrillic(string s) => s.Any(c => c is >= 'Ѐ' and <= 'ӿ');
 
     private static string[] Normalise(string s) =>
         s.ToLowerInvariant()

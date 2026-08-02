@@ -24,6 +24,7 @@ public sealed class WhisperOnnxEngine : IAsrEngine
     private readonly HashSet<int> suppress;
     private readonly HashSet<int> beginSuppress;
     private readonly int dModel;
+    private readonly int maxGeneratedTokens;
 
     private WhisperOnnxEngine(
         WhisperFeatureExtractor features,
@@ -47,6 +48,11 @@ public sealed class WhisperOnnxEngine : IAsrEngine
         this.suppress = suppress;
         this.beginSuppress = beginSuppress;
         this.dModel = dModel;
+
+        // MaxTargetPositions bounds prompt + generated tokens together, not generated tokens
+        // alone — the prompt occupies the first prompt.Length slots, so the greedy loop may only
+        // fill what is left.
+        this.maxGeneratedTokens = MaxTargetPositions - prompt.Length;
     }
 
     public static WhisperOnnxEngine Create(ModelPaths paths)
@@ -101,10 +107,19 @@ public sealed class WhisperOnnxEngine : IAsrEngine
 
     internal static (HashSet<int> suppress, HashSet<int> beginSuppress) LoadSuppression(string generationConfigPath)
     {
+        // A missing file must fail loudly: silently returning empty suppression sets would let
+        // the greedy loop generate text without any of the token bans the model was trained
+        // with, producing wrong output with no error — exactly the silent wrongness this engine
+        // is built to avoid.
+        if (!File.Exists(generationConfigPath))
+            throw new FileNotFoundException(
+                $"Не найден файл generation_config.json: \"{generationConfigPath}\". Без него " +
+                "списки подавляемых токенов останутся пустыми, и распознавание будет давать " +
+                "неверный текст без предупреждения.",
+                generationConfigPath);
+
         var suppress = new HashSet<int>();
         var begin = new HashSet<int>();
-        if (!File.Exists(generationConfigPath)) return (suppress, begin);
-
         using var doc = JsonDocument.Parse(File.ReadAllText(generationConfigPath));
         Fill(doc.RootElement, "suppress_tokens", suppress);
         Fill(doc.RootElement, "begin_suppress_tokens", begin);
@@ -130,7 +145,7 @@ public sealed class WhisperOnnxEngine : IAsrEngine
         var step = new WhisperOnnxDecoderStep(decoder, encoded, EncoderFrames, dModel);
 
         var ids = WhisperGreedyLoop.Run(
-            step, prompt, eotId, suppress, beginSuppress, MaxTargetPositions);
+            step, prompt, eotId, suppress, beginSuppress, maxGeneratedTokens);
 
         return new AsrResult(tokenizer.Decode(ids).Trim(), audioDuration, sw.Elapsed);
     }

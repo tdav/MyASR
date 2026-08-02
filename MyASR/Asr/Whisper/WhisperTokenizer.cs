@@ -19,8 +19,6 @@ public sealed class WhisperTokenizer
         this.tokenToId = tokenToId;
     }
 
-    public int Count => idToToken.Count;
-
     public static WhisperTokenizer Load(string vocabJsonPath, string addedTokensJsonPath)
     {
         var tokenToId = new Dictionary<string, int>(StringComparer.Ordinal);
