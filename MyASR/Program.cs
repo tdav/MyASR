@@ -25,9 +25,15 @@ internal static class Program
         });
 
         services.AddSingleton<HttpClient>();
-        services.AddSingleton<IReadOnlyList<ModelFileEntry>>(_ => ModelManifest.Files);
-        services.AddSingleton<ModelPaths>(_ => ModelPaths.Default());
-        services.AddSingleton<IModelProvider, HuggingFaceModelProvider>();
+        services.AddSingleton<IModelSourceResolver>(_ => new ModelSourceResolver(null));
+        services.AddSingleton<IModelProvider, ModelProvider>();
+        services.AddSingleton<Func<ModelDescriptor, ModelPaths>>(_ =>
+        {
+            var root = ModelRoot.Resolve();
+            return descriptor => new ModelPaths(root, descriptor);
+        });
+        services.AddSingleton<ModelPaths>(sp =>
+            sp.GetRequiredService<Func<ModelDescriptor, ModelPaths>>()(ModelCatalog.Default));
         services.AddSingleton<IMicCapture, WasapiMicCapture>();
         services.AddSingleton<IFeatureExtractor, MelSpectrogramExtractor>();
         services.AddSingleton<IHotkeyManager, WindowsHotkeyManager>();
@@ -36,8 +42,12 @@ internal static class Program
         services.AddSingleton<Func<IRnnTDecoder>>(sp => () =>
         {
             var paths = sp.GetRequiredService<ModelPaths>();
-            var vocab = Vocabulary.Load(paths.Vocab);
-            return new RnnTGreedyDecoder(paths, vocab);
+            var vocab = Vocabulary.Load(paths.File(GigaAmFiles.Vocab));
+            return new RnnTGreedyDecoder(
+                paths.File(GigaAmFiles.Encoder),
+                paths.File(GigaAmFiles.Decoder),
+                paths.File(GigaAmFiles.Joint),
+                vocab);
         });
 
         services.AddSingleton<IAsrService>(sp =>

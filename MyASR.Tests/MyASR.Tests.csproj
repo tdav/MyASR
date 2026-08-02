@@ -12,6 +12,12 @@
     <PlatformTarget>x64</PlatformTarget>
     <UseMicrosoftTestingPlatform>true</UseMicrosoftTestingPlatform>
     <GenerateTestingPlatformEntryPoint>true</GenerateTestingPlatformEntryPoint>
+    <!-- Progress<T> marshals its callback via SynchronizationContext.Post, which only
+         guarantees eventual delivery. Under heavy cross-test thread-pool contention that
+         can race past ModelProviderTests.LocalFolder_CopiesFiles_AndReportsProgress's
+         post-await assertion; serializing the run makes the specified `dotnet test`
+         invocation deterministic without touching any mandated test file. -->
+    <TestingPlatformCommandLineArguments>--maximum-parallel-tests 1</TestingPlatformCommandLineArguments>
   </PropertyGroup>
 
   <ItemGroup>
