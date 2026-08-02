@@ -72,7 +72,18 @@ def quantize_int8(fp32_dir, int8_dir):
         src = os.path.join(fp32_dir, graph)
         dst = os.path.join(int8_dir, graph)
         print(f"quantising {graph}")
-        quantize_dynamic(src, dst, weight_type=QuantType.QInt8)
+        # decoder_model_merged.onnx's top-level graph is a single `If` node: the real
+        # MatMul weights live in the then/else subgraphs but are declared as outer-scope
+        # initializers on the parent graph. Without EnableSubgraph, onnxruntime's dynamic
+        # quantizer only inspects the top-level node list, sees one `If` node, and quantizes
+        # nothing inside it -- the "quantized" decoder comes out ~fp32-sized because no
+        # weight ever actually changed dtype. EnableSubgraph makes it recurse into If/Loop
+        # subgraphs and resolve their weights through the parent scope.
+        quantize_dynamic(
+            src, dst,
+            weight_type=QuantType.QInt8,
+            extra_options={"EnableSubgraph": True},
+        )
     for name in SIDECARS:
         shutil.copy2(os.path.join(fp32_dir, name), os.path.join(int8_dir, name))
 
