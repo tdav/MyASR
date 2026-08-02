@@ -13,28 +13,38 @@ namespace MyASR.Tests.Asr.Whisper;
 /// than being marked skipped, so the test is genuinely exercised whenever the artefacts are
 /// present and stays inert (not merely "skipped") otherwise.
 ///
+/// The artefacts are looked for under <see cref="ModelRoot.Resolve()"/> — MYASR_MODELS_DIR when
+/// set, otherwise %LOCALAPPDATA%\MyASR\models — in that root's crisperwhisper2-small-int8/ folder.
+///
 /// To run the tests that need a Russian sample
 /// (<see cref="Transcribes_RussianSpeech"/>, <see cref="IntendedMode_DoesNotEmitVocalEventMarkers"/>):
-///   set MYASR_MODELS_DIR to a root containing crisperwhisper2-small-int8/
+///   put the exported model in crisperwhisper2-small-int8/ under that root
 ///   place a 16 kHz mono WAV of Russian speech at MyASR.Tests/Assets/russian_sample.wav
 ///   place its expected transcript at MyASR.Tests/Assets/russian_sample.txt
 ///
 /// <see cref="Transcribe_ReferenceWav_TwiceOnSameEngine_ProducesAgreeingResults"/> and
-/// <see cref="Decode_CyrillicProbe_MatchesReferenceText"/> need only MYASR_MODELS_DIR — they use
-/// the existing synthetic reference.wav or the model's own vocabulary files, not a Russian sample.
+/// <see cref="Decode_CyrillicProbe_MatchesReferenceText"/> need only the model — they use the
+/// existing synthetic reference.wav or the model's own vocabulary files, not a Russian sample.
 /// </summary>
 public class CrisperWhisperEndToEndTests
 {
     private static readonly ModelDescriptor Model = ModelCatalog.CrisperWhisperSmallInt8;
 
-    private static string? ModelFolder()
+    /// <summary>
+    /// The models root, sampled once. Nothing in the suite writes MYASR_MODELS_DIR — the tests
+    /// that cover <see cref="ModelRoot"/> pass it a stand-in accessor instead — so this stays the
+    /// value the run started with, and these gates cannot be tricked into the inert branch by a
+    /// concurrent write.
+    /// </summary>
+    private static readonly string Root = ModelRoot.Resolve();
+
+    /// <summary>The model's paths when every artefact it declares is on disk, otherwise null.</summary>
+    private static ModelPaths? ModelFiles()
     {
-        var root = Environment.GetEnvironmentVariable("MYASR_MODELS_DIR");
-        if (string.IsNullOrWhiteSpace(root)) return null;
-        var paths = new ModelPaths(root, Model);
+        var paths = new ModelPaths(Root, Model);
         foreach (var f in Model.Files)
             if (!File.Exists(paths.File(f.LocalName))) return null;
-        return paths.Root;
+        return paths;
     }
 
     private static string SamplePath =>
@@ -46,24 +56,16 @@ public class CrisperWhisperEndToEndTests
     private static string ReferenceWavPath =>
         Path.Combine(AppContext.BaseDirectory, "Assets", "reference.wav");
 
-    private static bool CanRun() => ModelFolder() is not null && File.Exists(SamplePath);
-
-    // These tests read MYASR_MODELS_DIR, and ModelPathsTests writes it. The environment is
-    // process-global, so without a shared mutex a concurrent write makes these silently decide
-    // the model is absent and go inert — the worst outcome for a gate, since it looks like a
-    // pass. Same group name as the other tests that touch that variable.
     [Test]
-    [NotInParallel("env-var-mutex")]
     public async Task Transcribes_RussianSpeech()
     {
-        if (!CanRun())
+        if (ModelFiles() is not { } paths || !File.Exists(SamplePath))
         {
             await Assert.That(true).IsTrue(); // модель и/или russian_sample.wav отсутствуют — тест неактивен
             return;
         }
 
-        var root = Environment.GetEnvironmentVariable("MYASR_MODELS_DIR")!;
-        using var engine = WhisperOnnxEngine.Create(new ModelPaths(root, Model));
+        using var engine = WhisperOnnxEngine.Create(paths);
 
         var pcm = WavReader.ReadMono16kFloat(SamplePath);
         var result = engine.Transcribe(pcm, TimeSpan.FromSeconds(pcm.Length / 16000.0));
@@ -80,17 +82,15 @@ public class CrisperWhisperEndToEndTests
     }
 
     [Test]
-    [NotInParallel("env-var-mutex")]
     public async Task IntendedMode_DoesNotEmitVocalEventMarkers()
     {
-        if (!CanRun())
+        if (ModelFiles() is not { } paths || !File.Exists(SamplePath))
         {
             await Assert.That(true).IsTrue(); // модель и/или russian_sample.wav отсутствуют — тест неактивен
             return;
         }
 
-        var root = Environment.GetEnvironmentVariable("MYASR_MODELS_DIR")!;
-        using var engine = WhisperOnnxEngine.Create(new ModelPaths(root, Model));
+        using var engine = WhisperOnnxEngine.Create(paths);
 
         var pcm = WavReader.ReadMono16kFloat(SamplePath);
         var text = engine.Transcribe(pcm, TimeSpan.FromSeconds(pcm.Length / 16000.0)).Text;
@@ -107,17 +107,15 @@ public class CrisperWhisperEndToEndTests
     /// reference.wav has no speech.
     /// </summary>
     [Test]
-    [NotInParallel("env-var-mutex")]
     public async Task Transcribe_ReferenceWav_TwiceOnSameEngine_ProducesAgreeingResults()
     {
-        if (ModelFolder() is null)
+        if (ModelFiles() is not { } paths)
         {
-            await Assert.That(true).IsTrue(); // каталог модели (MYASR_MODELS_DIR) отсутствует — тест неактивен
+            await Assert.That(true).IsTrue(); // каталог модели отсутствует — тест неактивен
             return;
         }
 
-        var root = Environment.GetEnvironmentVariable("MYASR_MODELS_DIR")!;
-        using var engine = WhisperOnnxEngine.Create(new ModelPaths(root, Model));
+        using var engine = WhisperOnnxEngine.Create(paths);
 
         var pcm = WavReader.ReadMono16kFloat(ReferenceWavPath);
         var duration = TimeSpan.FromSeconds(pcm.Length / 16000.0);
@@ -140,17 +138,14 @@ public class CrisperWhisperEndToEndTests
     /// exercises toy vocabularies the tests build themselves.
     /// </summary>
     [Test]
-    [NotInParallel("env-var-mutex")]
     public async Task Decode_CyrillicProbe_MatchesReferenceText()
     {
-        var root = ModelFolder();
-        if (root is null)
+        if (ModelFiles() is not { } paths)
         {
-            await Assert.That(true).IsTrue(); // каталог модели (MYASR_MODELS_DIR) отсутствует — тест неактивен
+            await Assert.That(true).IsTrue(); // каталог модели отсутствует — тест неактивен
             return;
         }
 
-        var paths = new ModelPaths(Environment.GetEnvironmentVariable("MYASR_MODELS_DIR")!, Model);
         var tokenizer = WhisperTokenizer.Load(
             paths.File(CrisperWhisperFiles.Vocab), paths.File(CrisperWhisperFiles.AddedTokens));
 

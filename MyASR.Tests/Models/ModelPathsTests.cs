@@ -4,52 +4,39 @@ namespace MyASR.Tests.Models;
 
 public class ModelPathsTests
 {
+    /// <summary>
+    /// A stand-in for the process environment in which only the models-root variable is set.
+    /// These tests hand it to <see cref="ModelRoot.Resolve(Func{string, string?})"/> rather than
+    /// writing the real variable: it is process-global, and the end-to-end gates in
+    /// <see cref="MyASR.Tests.Asr.Whisper.CrisperWhisperEndToEndTests"/> read it concurrently to
+    /// find real artefacts. A write here would make those gates go inert and pass without testing
+    /// anything.
+    /// </summary>
+    private static Func<string, string?> EnvWith(string? modelsDir) =>
+        name => name == ModelRoot.EnvVarName ? modelsDir : null;
+
     [Test]
-    [NotInParallel("env-var-mutex")]
+    public async Task ModelRoot_EnvVarName_IsTheDocumentedOne()
+    {
+        await Assert.That(ModelRoot.EnvVarName).IsEqualTo("MYASR_MODELS_DIR");
+    }
+
+    [Test]
     public async Task ModelRoot_Default_PointsTo_LocalAppData_MyASR_Models()
     {
-        var saved = Environment.GetEnvironmentVariable("MYASR_MODELS_DIR");
-        try
-        {
-            Environment.SetEnvironmentVariable("MYASR_MODELS_DIR", null);
-            await Assert.That(ModelRoot.Resolve()).EndsWith("MyASR\\models");
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("MYASR_MODELS_DIR", saved);
-        }
+        await Assert.That(ModelRoot.Resolve(EnvWith(null))).EndsWith("MyASR\\models");
     }
 
     [Test]
-    [NotInParallel("env-var-mutex")]
     public async Task ModelRoot_EnvironmentOverride_TakesPrecedence()
     {
-        var saved = Environment.GetEnvironmentVariable("MYASR_MODELS_DIR");
-        try
-        {
-            Environment.SetEnvironmentVariable("MYASR_MODELS_DIR", @"C:\my-override");
-            await Assert.That(ModelRoot.Resolve()).IsEqualTo(@"C:\my-override");
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("MYASR_MODELS_DIR", saved);
-        }
+        await Assert.That(ModelRoot.Resolve(EnvWith(@"C:\my-override"))).IsEqualTo(@"C:\my-override");
     }
 
     [Test]
-    [NotInParallel("env-var-mutex")]
     public async Task ModelRoot_BlankEnvironmentValue_IsIgnored()
     {
-        var saved = Environment.GetEnvironmentVariable("MYASR_MODELS_DIR");
-        try
-        {
-            Environment.SetEnvironmentVariable("MYASR_MODELS_DIR", "   ");
-            await Assert.That(ModelRoot.Resolve()).EndsWith("MyASR\\models");
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("MYASR_MODELS_DIR", saved);
-        }
+        await Assert.That(ModelRoot.Resolve(EnvWith("   "))).EndsWith("MyASR\\models");
     }
 
     [Test]
