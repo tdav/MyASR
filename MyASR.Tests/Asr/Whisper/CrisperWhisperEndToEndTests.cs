@@ -48,7 +48,12 @@ public class CrisperWhisperEndToEndTests
 
     private static bool CanRun() => ModelFolder() is not null && File.Exists(SamplePath);
 
+    // These tests read MYASR_MODELS_DIR, and ModelPathsTests writes it. The environment is
+    // process-global, so without a shared mutex a concurrent write makes these silently decide
+    // the model is absent and go inert — the worst outcome for a gate, since it looks like a
+    // pass. Same group name as the other tests that touch that variable.
     [Test]
+    [NotInParallel("env-var-mutex")]
     public async Task Transcribes_RussianSpeech()
     {
         if (!CanRun())
@@ -75,6 +80,7 @@ public class CrisperWhisperEndToEndTests
     }
 
     [Test]
+    [NotInParallel("env-var-mutex")]
     public async Task IntendedMode_DoesNotEmitVocalEventMarkers()
     {
         if (!CanRun())
@@ -101,6 +107,7 @@ public class CrisperWhisperEndToEndTests
     /// reference.wav has no speech.
     /// </summary>
     [Test]
+    [NotInParallel("env-var-mutex")]
     public async Task Transcribe_ReferenceWav_TwiceOnSameEngine_ProducesAgreeingResults()
     {
         if (ModelFolder() is null)
@@ -133,6 +140,7 @@ public class CrisperWhisperEndToEndTests
     /// exercises toy vocabularies the tests build themselves.
     /// </summary>
     [Test]
+    [NotInParallel("env-var-mutex")]
     public async Task Decode_CyrillicProbe_MatchesReferenceText()
     {
         var root = ModelFolder();
