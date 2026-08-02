@@ -1,0 +1,8 @@
+optimum[exporters]>=1.24
+onnx>=1.17
+onnxruntime>=1.20
+transformers>=4.46
+torch>=2.4
+numpy>=1.26
+soundfile>=0.12
+crisperwhisper==2.0.1
