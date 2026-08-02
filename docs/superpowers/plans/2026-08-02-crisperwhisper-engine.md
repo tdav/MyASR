@@ -285,9 +285,11 @@ git commit -m "build: export CrisperWhisper 2.0 small to ONNX in fp32 and int8"
 
 **Files:**
 - Create: `tools/generate_crisperwhisper_reference.py`
+- Create: `MyASR.Tests/Assets/reference.wav` (generated — currently gitignored and absent)
 - Create: `MyASR.Tests/Assets/reference_filterbank_slaney_80x201.json` (generated)
 - Create: `MyASR.Tests/Assets/crisperwhisper_features.bin` (generated)
 - Create: `MyASR.Tests/Assets/crisperwhisper_reference.json` (generated)
+- Modify: `.gitignore` (stop ignoring `reference.wav`)
 
 **Interfaces:**
 - Consumes: the export from Task 1 and the existing `MyASR.Tests/Assets/reference.wav`.
@@ -347,11 +349,30 @@ def write_slaney_filterbank():
     print(f"wrote {path} shape={fb.shape}")
 
 
-def write_features_and_tokens():
+def ensure_reference_wav():
+    """
+    reference.wav is not in the repository (it was gitignored and never committed), so
+    synthesize the same chirp tools/generate_reference.py describes. Needs only numpy and
+    soundfile — no model — so the C# feature-parity test has a deterministic input.
+    """
     import soundfile as sf
-    from transformers import WhisperFeatureExtractor, WhisperTokenizerFast
-
     wav_path = os.path.join(OUT_DIR, "reference.wav")
+    if os.path.exists(wav_path):
+        return wav_path
+
+    t = np.linspace(0, 3, 3 * SR, endpoint=False)
+    chirp = 0.3 * np.sin(2 * np.pi * (200 + (4000 - 200) * t / 3) * t)
+    audio = np.concatenate([chirp, np.zeros(SR, dtype=np.float32)]).astype(np.float32)
+    sf.write(wav_path, audio, SR, subtype="PCM_16")
+    print(f"wrote {wav_path}")
+    return wav_path
+
+
+def write_features_and_tokens():
+    from transformers import WhisperFeatureExtractor, WhisperTokenizerFast
+    import soundfile as sf
+
+    wav_path = ensure_reference_wav()
     audio, sr = sf.read(wav_path, dtype="float32")
     assert sr == SR, f"reference.wav must be {SR} Hz, got {sr}"
 
@@ -443,6 +464,17 @@ if __name__ == "__main__":
     print("done")
 ```
 
+- [ ] **Step 1b: Stop ignoring the reference WAV**
+
+`.gitignore` currently lists `MyASR.Tests/Assets/reference.wav`, which is why the file has never
+existed in a fresh clone. The Whisper feature-parity test needs it on any machine, and at 128 KB
+it belongs in the repository. Delete that one line, keeping the `reference_mel.bin` line:
+
+```
+# Test artefacts that are large or generated
+MyASR.Tests/Assets/reference_mel.bin
+```
+
 - [ ] **Step 2: Run the generator**
 
 Run:
@@ -477,7 +509,7 @@ intended-mode token in the 51885-51889 range.
 - [ ] **Step 4: Commit the assets**
 
 ```bash
-git add tools/generate_crisperwhisper_reference.py MyASR.Tests/Assets/reference_filterbank_slaney_80x201.json MyASR.Tests/Assets/crisperwhisper_features.bin MyASR.Tests/Assets/crisperwhisper_reference.json
+git add .gitignore tools/generate_crisperwhisper_reference.py MyASR.Tests/Assets/reference.wav MyASR.Tests/Assets/reference_filterbank_slaney_80x201.json MyASR.Tests/Assets/crisperwhisper_features.bin MyASR.Tests/Assets/crisperwhisper_reference.json
 git commit -m "test: capture golden Whisper features, prompt and tokens from the reference impl"
 ```
 
