@@ -731,16 +731,22 @@ public class WhisperFeatureExtractorTests
     }
 
     [Test]
-    public async Task Output_IsBoundedAboveByOne_BecauseOfTheWhisperNormalisation()
+    public async Task DynamicRange_IsExactlyTwo_BecauseOfTheWhisperClamp()
     {
         var feats = new WhisperFeatureExtractor().Extract(LoadReferenceWav());
         var max = float.MinValue;
+        var min = float.MaxValue;
         for (var t = 0; t < Frames; t++)
             for (var m = 0; m < Mels; m++)
+            {
                 max = Math.Max(max, feats[t, m]);
+                min = Math.Min(min, feats[t, m]);
+            }
 
-        // log_spec is clamped to max-8 then mapped by (x+4)/4, so the peak is exactly 1.0.
-        await Assert.That(max).IsEqualTo(1.0f).Within(1e-4f);
+        // log10 values are clamped to a span of 8 decades and then divided by 4, so the
+        // spread is 2.0 regardless of how loud the input was. The absolute peak is not a
+        // fixed number — it is (maxLog + 4) / 4, and maxLog depends on the signal.
+        await Assert.That(max - min).IsEqualTo(2.0f).Within(1e-4f);
     }
 
     [Test]
@@ -1837,7 +1843,7 @@ public sealed class WhisperOnnxDecoderStep : IWhisperDecoderStep, IDisposable
     private readonly int numHeads;
     private readonly int headDim;
 
-    private Dictionary<string, DenseTensor<float>> cache;
+    private readonly Dictionary<string, DenseTensor<float>> cache;
 
     public WhisperOnnxDecoderStep(InferenceSession session, float[] encoderHidden, int encoderFrames, int dModel)
     {
@@ -1849,7 +1855,9 @@ public sealed class WhisperOnnxDecoderStep : IWhisperDecoderStep, IDisposable
             .ToArray();
 
         // past_key_values.N.decoder.key has shape [batch, heads, seq, head_dim]; heads is fixed
-        // in the graph, head_dim follows from d_model.
+        // in the graph, head_dim follows from d_model. For Whisper the encoder's output width
+        // equals the decoder's d_model, which is why one value serves both — do not "simplify"
+        // this by reading the head dim from somewhere else.
         var sample = session.InputMetadata[pastNames[0]].Dimensions;
         numHeads = sample[1] > 0 ? sample[1] : 12;
         headDim = dModel / numHeads;
@@ -1878,7 +1886,6 @@ public sealed class WhisperOnnxDecoderStep : IWhisperDecoderStep, IDisposable
         using var results = session.Run(inputs);
 
         float[]? logits = null;
-        var next = new Dictionary<string, DenseTensor<float>>(pastNames.Length);
 
         foreach (var r in results)
         {
@@ -1894,12 +1901,20 @@ public sealed class WhisperOnnxDecoderStep : IWhisperDecoderStep, IDisposable
             else if (r.Name.StartsWith(PresentPrefix, StringComparison.Ordinal))
             {
                 var pastName = PastPrefix + r.Name[PresentPrefix.Length..];
+
+                // Cross-attention K/V are computed from encoder_hidden_states on the no-cache
+                // branch only. On later steps the graph merely passes the past inputs through,
+                // and several optimum exports emit those present.*.encoder.* outputs as
+                // zero-length. Overwriting the encoder cache with an empty tensor makes the
+                // decode degrade into nonsense with no exception, so capture it once and keep it.
+                var isEncoderSide = pastName.Contains(".encoder.", StringComparison.Ordinal);
+                if (isEncoderSide && !firstStep) continue;
+
                 var tensor = r.AsTensor<float>();
-                next[pastName] = new DenseTensor<float>(tensor.ToArray(), tensor.Dimensions.ToArray());
+                cache[pastName] = new DenseTensor<float>(tensor.ToArray(), tensor.Dimensions.ToArray());
             }
         }
 
-        cache = next;
         return logits ?? throw new InvalidOperationException("Декодер не вернул logits.");
     }
 
@@ -1907,13 +1922,43 @@ public sealed class WhisperOnnxDecoderStep : IWhisperDecoderStep, IDisposable
     {
         if (!firstStep && cache.TryGetValue(name, out var cached)) return cached;
 
-        // Encoder-side cache is recomputed on the no-cache pass too, so both start empty.
+        // The no-cache branch still requires every past input to be present, so it gets
+        // zero-length tensors for both the decoder and the encoder side.
         return new DenseTensor<float>(Array.Empty<float>(), [1, numHeads, 0, headDim]);
     }
 
     public void Dispose() => session.Dispose();
 }
 ```
+
+- [ ] **Step 4b: Probe the exported graph's cache behaviour before trusting it**
+
+The single most likely way this feature produces fluent nonsense instead of an error is the
+cross-attention cache going empty after the first step. Confirm what your export actually does:
+
+```bash
+python -c "
+import numpy as np, onnxruntime as ort
+s = ort.InferenceSession('build/crisperwhisper/int8/decoder_model_merged.onnx')
+names = [i.name for i in s.get_inputs()]
+past = [n for n in names if n.startswith('past_key_values.')]
+enc = np.zeros((1, 1500, 768), np.float32)
+empty = {n: np.zeros((1, 12, 0, 64), np.float32) for n in past}
+out0 = s.run(None, {'input_ids': np.array([[50258, 50263, 50359, 50363]], np.int64),
+                    'encoder_hidden_states': enc, 'use_cache_branch': np.array([False]), **empty})
+onames = [o.name for o in s.get_outputs()]
+cache0 = {onames[i].replace('present.', 'past_key_values.'): out0[i]
+          for i in range(len(onames)) if onames[i].startswith('present.')}
+out1 = s.run(None, {'input_ids': np.array([[123]], np.int64),
+                    'encoder_hidden_states': enc, 'use_cache_branch': np.array([True]), **cache0})
+enc_out = [(onames[i], out1[i].shape) for i in range(len(onames)) if '.encoder.' in onames[i]][:2]
+print('encoder present shapes on step 2:', enc_out)
+"
+```
+
+Expected: shapes like `(1, 12, 1500, 64)`. If they come back with a `0` in the third position,
+the guard added in Step 4 is what keeps the decode correct — leave it in either way, it costs
+nothing when the outputs are full.
 
 - [ ] **Step 5: Write the engine**
 

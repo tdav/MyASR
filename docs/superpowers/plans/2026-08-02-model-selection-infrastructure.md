@@ -230,10 +230,19 @@ and in `DownloadOneAsync` replace the two `f.FileName` progress arguments and th
 The `f.Url` reference on line 34 becomes `f.SourceRelativePath` temporarily — it still holds a full URL for GigaAM because `SourceRelativePath` equals the file name and the base is joined in Task 5. To keep this task compiling and honest, change the manifest entries' `SourceRelativePath` usage in the provider to build the full URL inline for now:
 
 ```csharp
+        // Scaffolding: Task 5 replaces this with a resolved base URI. Until then the provider
+        // can only serve GigaAM, and says so instead of silently fetching the wrong model.
+        if (!ReferenceEquals(manifest, ModelCatalog.GigaAmV3.Files))
+            throw new NotSupportedException("Пока поддерживается загрузка только GigaAM v3.");
         using var req = new HttpRequestMessage(HttpMethod.Get, ModelCatalog.GigaAmV3.DefaultBaseUri + f.SourceRelativePath);
 ```
 
-This line is replaced properly in Task 5; it exists only so the tree builds between tasks.
+This block is replaced properly in Task 5; it exists only so the tree builds between tasks.
+The `ModelProviderTests` in Task 5 replace the hand-built manifest tests that would trip the
+guard, and the one Task 1 test that passes a custom entry list
+(`EnsureDownloadedAsync_ResumesPartialFile_WithRangeHeader`) must be marked
+`[Skip("Восстанавливается в задаче 5, когда источник станет настраиваемым")]` for the duration
+of Tasks 1-4.
 
 In `MyASR/Program.cs` line 28, replace the manifest registration:
 
@@ -1542,6 +1551,40 @@ public class AsrServiceTests
     }
 
     [Test]
+    public async Task SwitchModelAsync_FactoryThrows_KeepsThePreviousModelAsCurrent()
+    {
+        var svc = Build(new FakeMic(), d =>
+            d.Id == ModelB.Id ? throw new FileNotFoundException("нет файла модели") : new FakeEngine());
+
+        await svc.WarmupAsync();
+
+        await Assert.That(async () => await svc.SwitchModelAsync(ModelB, CancellationToken.None))
+            .Throws<FileNotFoundException>();
+        await Assert.That(svc.CurrentModel.Id).IsEqualTo(ModelA.Id);
+    }
+
+    [Test]
+    public async Task SwitchModelAsync_FactoryThrows_ThenRetryingThePreviousModelRebuildsIt()
+    {
+        var built = 0;
+        var svc = Build(new FakeMic(), d =>
+        {
+            if (d.Id == ModelB.Id) throw new FileNotFoundException("нет файла модели");
+            built++;
+            return new FakeEngine();
+        });
+
+        await svc.WarmupAsync();
+        try { await svc.SwitchModelAsync(ModelB, CancellationToken.None); }
+        catch (FileNotFoundException) { /* expected */ }
+
+        await svc.WarmupAsync(); // the failed switch disposed the old engine, so this rebuilds
+
+        await Assert.That(built).IsEqualTo(2);
+        await Assert.That(svc.CurrentModel.Id).IsEqualTo(ModelA.Id);
+    }
+
+    [Test]
     public async Task SwitchModelAsync_ToTheSameModel_KeepsTheWarmEngine()
     {
         var calls = 0;
@@ -1706,12 +1749,16 @@ public sealed class AsrService(
         // Drop the old engine before building the new one: two loaded ONNX models
         // would double peak memory, and a stale cached engine is the failure mode
         // this method exists to prevent.
-        var previous = engine;
+        var previousEngine = engine;
         engine = null;
-        previous?.Dispose();
+        previousEngine?.Dispose();
 
+        // CurrentModel moves only after the factory succeeds. Advancing it first would leave
+        // the service pointing at a model it failed to load, and the next recording would try
+        // to build that same broken model through the ??= in StopAndRecognizeAsync.
+        var built = await Task.Run(() => engineFactory(model), ct);
+        engine = built;
         CurrentModel = model;
-        await Task.Run(() => engine = engineFactory(model), ct);
     }
 
     public async Task StopAndRecognizeAsync()
@@ -1783,7 +1830,7 @@ Remove the now-unused `services.AddSingleton<IFeatureExtractor, MelSpectrogramEx
 - [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `dotnet test MyASR.Tests/MyASR.Tests.csproj`
-Expected: PASS, including the thirteen `AsrServiceTests`.
+Expected: PASS, including the fifteen `AsrServiceTests`.
 
 - [ ] **Step 7: Commit**
 
@@ -2219,10 +2266,25 @@ public class ModelSelectionPolicyTests
     }
 
     [Test]
-    public async Task StatusText_NoLicenceNote_AddsNothingExtra()
+    public async Task StatusText_NoLicenceNote_OmitsTheParenthesisedNote()
     {
-        var text = ModelSelectionPolicy.StatusText(ModelCatalog.GigaAmV3, true, "F9");
-        await Assert.That(text).DoesNotContain("(");
+        var note = "только для исследований";
+        var withNote = ModelSelectionPolicy.StatusText(
+            ModelCatalog.GigaAmV3 with { LicenceNote = note }, true, "F9");
+        var withoutNote = ModelSelectionPolicy.StatusText(ModelCatalog.GigaAmV3, true, "F9");
+
+        await Assert.That(withNote).Contains($"({note})");
+        await Assert.That(withoutNote).DoesNotContain(note);
+        await Assert.That(withoutNote.Length).IsLessThan(withNote.Length);
+    }
+
+    [Test]
+    public async Task StatusText_EmptyLicenceNote_IsTreatedAsAbsent()
+    {
+        var text = ModelSelectionPolicy.StatusText(
+            ModelCatalog.GigaAmV3 with { LicenceNote = "" }, true, "F9");
+        await Assert.That(text).IsEqualTo(
+            ModelSelectionPolicy.StatusText(ModelCatalog.GigaAmV3, true, "F9"));
     }
 }
 ```
