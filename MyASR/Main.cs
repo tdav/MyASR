@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MyASR.Asr;
 using MyASR.Audio;
@@ -25,14 +24,18 @@ public partial class Main : Form
     private readonly uint _hotkeyMod;
     private readonly uint _hotkeyVk;
 
-    private readonly IServiceProvider sp;
     private readonly IAsrService asr;
     private readonly IMicCapture mic;
     private readonly IModelProvider modelProvider;
-    private readonly ModelPaths paths;
+    private readonly Func<ModelDescriptor, ModelPaths> pathsFor;
+    private readonly Func<ModelDescriptor, DownloadForm> downloadFormFor;
     private readonly IHotkeyManager hotkeys;
     private readonly ILogger<Main>? logger;
     private readonly UserSettings settings = UserSettings.Load();
+
+    private ModelDescriptor selectedModel = ModelCatalog.Default;
+    private bool suppressModelComboEvent;
+    private bool hotkeyRegistered;
 
     private readonly System.Windows.Forms.Timer vuTimer = new() { Interval = 33 };
     private readonly System.Windows.Forms.Timer hotkeyPoll = new() { Interval = 16 };
@@ -45,21 +48,23 @@ public partial class Main : Form
     public Main()
     {
         InitializeComponent();
-        sp = null!; asr = null!; mic = null!;
-        modelProvider = null!; paths = null!; hotkeys = null!;
+        asr = null!; mic = null!;
+        modelProvider = null!; pathsFor = null!; downloadFormFor = null!; hotkeys = null!;
     }
 
     public Main(
-        IServiceProvider sp,
         IAsrService asr,
         IMicCapture mic,
         IModelProvider modelProvider,
-        ModelPaths paths,
+        Func<ModelDescriptor, ModelPaths> pathsFor,
+        Func<ModelDescriptor, DownloadForm> downloadFormFor,
         IHotkeyManager hotkeys,
         ILogger<Main>? logger = null) : this()
     {
-        this.sp = sp; this.asr = asr; this.mic = mic;
-        this.modelProvider = modelProvider; this.paths = paths;
+        this.asr = asr; this.mic = mic;
+        this.modelProvider = modelProvider;
+        this.pathsFor = pathsFor;
+        this.downloadFormFor = downloadFormFor;
         this.hotkeys = hotkeys; this.logger = logger;
 
         const string DefaultHotkey = "Ctrl+Shift+X";
@@ -86,6 +91,8 @@ public partial class Main : Form
         copyBtn.Click += (_, _) => CopyToClipboard();
         saveTxtBtn.Click += (_, _) => SaveAsTxt();
 
+        modelCombo.SelectedIndexChanged += async (_, _) => await OnModelSelectedAsync();
+
         Shown += async (_, _) => await OnFormShownAsync();
         FormClosed += (_, _) => Cleanup();
     }
@@ -102,41 +109,25 @@ public partial class Main : Form
             if (idx >= 0) _deviceCombo.SelectedIndex = idx;
         }
 
+        selectedModel = ModelCatalog.ById(settings.ModelId);
+        PopulateModels();
+
         micButton.Enabled = false;
 
-        if (!modelProvider.AreModelsAvailable(paths))
-        {
-            statusLabel.Text = "⏬ Загрузка моделей...";
-            using var dlg = sp.GetRequiredService<Func<ModelDescriptor, DownloadForm>>()(paths.Model);
-            if (dlg.ShowDialog(this) != DialogResult.OK)
-            {
-                MessageBox.Show("Модели не загружены — приложение будет закрыто.",
-                                "MyASR", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                Close();
-                return;
-            }
-        }
+        LegacyModelLayout.Migrate(ModelRoot.Resolve(), ModelCatalog.GigaAmV3);
 
-        statusLabel.Text = "⏳ Загрузка модели в память...";
-        UseWaitCursor = true;
-        Refresh();
-        try
+        if (!await EnsureModelPresentAsync(selectedModel))
         {
-            await asr.WarmupAsync();
-        }
-        catch (Exception ex)
-        {
-            logger?.LogError(ex, "Model warmup failed");
-            UseWaitCursor = false;
-            MessageBox.Show($"Не удалось загрузить ONNX-модели:\n{ex.Message}",
-                            "MyASR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show("Модель не загружена — приложение будет закрыто.",
+                            "MyASR", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             Close();
             return;
         }
-        UseWaitCursor = false;
 
-        var registered = hotkeys.Register(Handle, HotkeyId, _hotkeyMod, _hotkeyVk);
-        if (!registered)
+        if (!await WarmUpAsync(selectedModel, closeOnFailure: true)) return;
+
+        hotkeyRegistered = hotkeys.Register(Handle, HotkeyId, _hotkeyMod, _hotkeyVk);
+        if (!hotkeyRegistered)
         {
             logger?.LogWarning("Не удалось зарегистрировать глобальный хоткей {Hotkey}", settings.Hotkey);
             MessageBox.Show(
@@ -147,12 +138,108 @@ public partial class Main : Form
         }
         hotkeyPoll.Start();
         micButton.Enabled = true;
-        statusLabel.Text = registered
-            ? $"● Idle (PTT: {settings.Hotkey})"
-            : "● Idle (PTT недоступен — занят)";
+        UpdateModelStatus();
 
         if (!StartupManager.IsEnabled())
             StartupManager.SetEnabled(true);
+    }
+
+    private void PopulateModels()
+    {
+        suppressModelComboEvent = true;
+        modelCombo.DataSource = ModelCatalog.All.ToList();
+        modelCombo.DisplayMember = nameof(ModelDescriptor.DisplayName);
+        modelCombo.SelectedIndex = Math.Max(0, ModelCatalog.All.ToList().FindIndex(m => m.Id == selectedModel.Id));
+        suppressModelComboEvent = false;
+    }
+
+    /// <returns>true when every file of <paramref name="model"/> is on disk afterwards.</returns>
+    private async Task<bool> EnsureModelPresentAsync(ModelDescriptor model)
+    {
+        var paths = pathsFor(model);
+        if (modelProvider.AreModelsAvailable(paths)) return true;
+
+        statusLabel.Text = $"⏬ Загрузка модели «{model.DisplayName}»...";
+        using var dlg = downloadFormFor(model);
+        var ok = dlg.ShowDialog(this) == DialogResult.OK;
+        await Task.Yield(); // let the dialog finish tearing down before the caller continues
+        return ok;
+    }
+
+    private async Task<bool> WarmUpAsync(ModelDescriptor model, bool closeOnFailure)
+    {
+        statusLabel.Text = $"⏳ Загрузка «{model.DisplayName}» в память...";
+        UseWaitCursor = true;
+        Refresh();
+        try
+        {
+            if (asr.CurrentModel.Id == model.Id)
+                await asr.WarmupAsync();
+            else
+                await asr.SwitchModelAsync(model, CancellationToken.None);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogError(ex, "Model warmup failed for {ModelId}", model.Id);
+            MessageBox.Show($"Не удалось загрузить модель «{model.DisplayName}»:\n{ex.Message}",
+                            "MyASR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            if (closeOnFailure) Close();
+            return false;
+        }
+        finally
+        {
+            UseWaitCursor = false;
+        }
+    }
+
+    private async Task OnModelSelectedAsync()
+    {
+        if (suppressModelComboEvent) return;
+        if (modelCombo.SelectedItem is not ModelDescriptor chosen) return;
+        if (chosen.Id == selectedModel.Id) return;
+
+        if (!ModelSelectionPolicy.CanSwitch(asr.State))
+        {
+            statusLabel.Text = "Модель нельзя менять во время записи или распознавания.";
+            RevertModelCombo();
+            return;
+        }
+
+        var previous = selectedModel;
+        micButton.Enabled = false;
+        try
+        {
+            if (!await EnsureModelPresentAsync(chosen) || !await WarmUpAsync(chosen, closeOnFailure: false))
+            {
+                selectedModel = previous;
+                RevertModelCombo();
+                await WarmUpAsync(previous, closeOnFailure: false);
+                return;
+            }
+
+            selectedModel = chosen;
+            settings.ModelId = chosen.Id;
+            settings.Save();
+        }
+        finally
+        {
+            micButton.Enabled = true;
+            UpdateModelStatus();
+        }
+    }
+
+    private void RevertModelCombo()
+    {
+        suppressModelComboEvent = true;
+        modelCombo.SelectedIndex = Math.Max(0, ModelCatalog.All.ToList().FindIndex(m => m.Id == selectedModel.Id));
+        suppressModelComboEvent = false;
+    }
+
+    private void UpdateModelStatus()
+    {
+        statusLabel.Text = ModelSelectionPolicy.StatusText(selectedModel, hotkeyRegistered, settings.Hotkey);
+        _modelLabel.Text = selectedModel.DisplayName;
     }
 
     protected override void WndProc(ref Message m)
@@ -200,9 +287,9 @@ public partial class Main : Form
     private void OnStateChanged(AsrStateChanged s)
     {
         if (InvokeRequired) { BeginInvoke(() => OnStateChanged(s)); return; }
+        if (s.State == AsrState.Idle) { UpdateModelStatus(); micButton.Enabled = true; return; }
         statusLabel.Text = s.State switch
         {
-            AsrState.Idle => "● Idle",
             AsrState.Recording => $"⏺ Recording {recordingTimer.Elapsed.TotalSeconds:F1}s",
             AsrState.Decoding => "⏳ Decoding...",
             _ => "?"
@@ -332,6 +419,7 @@ public partial class Main : Form
         hotkeyPoll.Stop();
         maxLengthTimer.Stop();
         if (_deviceCombo.SelectedItem is DeviceInfo dev) settings.MicDeviceId = dev.Id;
+        settings.ModelId = selectedModel.Id;
         settings.GlobalHotkey = true;
         settings.Save();
         hotkeys.Dispose();

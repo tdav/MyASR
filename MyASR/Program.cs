@@ -32,8 +32,6 @@ internal static class Program
             var root = ModelRoot.Resolve();
             return descriptor => new ModelPaths(root, descriptor);
         });
-        services.AddSingleton<ModelPaths>(sp =>
-            sp.GetRequiredService<Func<ModelDescriptor, ModelPaths>>()(ModelCatalog.Default));
         services.AddSingleton<IMicCapture, WasapiMicCapture>();
         services.AddSingleton<IHotkeyManager, WindowsHotkeyManager>();
 
