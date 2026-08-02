@@ -35,8 +35,10 @@ public class WhisperPromptTests
 
         // The reference implementation emits all five intended-mode tags before the standard
         // Whisper prefix. This is the opposite of the obvious guess, which is why it is asserted.
-        await Assert.That(r.prompt_token_ids.Take(5)).IsEquivalentTo(new[] { 51885, 51886, 51887, 51888, 51889 });
-        await Assert.That(r.prompt_token_ids.Skip(5)).IsEquivalentTo(new[] { 50258, 50263, 50359, 50363 });
+        await Assert.That(r.prompt_token_ids.Take(5))
+            .IsEquivalentTo(new[] { 51885, 51886, 51887, 51888, 51889 }, CollectionOrdering.Matching);
+        await Assert.That(r.prompt_token_ids.Skip(5))
+            .IsEquivalentTo(new[] { 50258, 50263, 50359, 50363 }, CollectionOrdering.Matching);
     }
 
     [Test]
@@ -63,6 +65,6 @@ public class WhisperPromptTests
 
         var built = WhisperPrompt.Build(tokenizer, WhisperPrompt.RussianToken, WhisperPrompt.IntendedModeTokens);
 
-        await Assert.That(built).IsEquivalentTo(r.prompt_token_ids);
+        await Assert.That(built).IsEquivalentTo(r.prompt_token_ids, CollectionOrdering.Matching);
     }
 }

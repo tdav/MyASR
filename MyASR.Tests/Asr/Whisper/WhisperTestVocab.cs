@@ -33,10 +33,19 @@ internal static class WhisperTestVocab
 
         var dir = Path.Combine(Path.GetTempPath(), "MyASR-tests-" + Guid.NewGuid());
         Directory.CreateDirectory(dir);
-        var vocabPath = Path.Combine(dir, "vocab.json");
-        var addedPath = Path.Combine(dir, "added_tokens.json");
-        File.WriteAllText(vocabPath, "{}");
-        File.WriteAllText(addedPath, JsonSerializer.Serialize(added));
-        return WhisperTokenizer.Load(vocabPath, addedPath);
+        try
+        {
+            var vocabPath = Path.Combine(dir, "vocab.json");
+            var addedPath = Path.Combine(dir, "added_tokens.json");
+            File.WriteAllText(vocabPath, "{}");
+            File.WriteAllText(addedPath, JsonSerializer.Serialize(added));
+            // WhisperTokenizer.Load reads both files eagerly (via File.ReadAllText inside
+            // Load/Merge), so the directory can be removed as soon as it returns.
+            return WhisperTokenizer.Load(vocabPath, addedPath);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 }

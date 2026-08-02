@@ -150,7 +150,7 @@ public class AsrServiceTests
         await svc.WarmupAsync();
         await svc.SwitchModelAsync(ModelB, CancellationToken.None);
 
-        await Assert.That(requested).IsEquivalentTo(new[] { ModelA.Id, ModelB.Id });
+        await Assert.That(requested).IsEquivalentTo(new[] { ModelA.Id, ModelB.Id }, CollectionOrdering.Matching);
     }
 
     [Test]
