@@ -174,13 +174,16 @@ public class AsrServiceTests
     [Test]
     public async Task SwitchModelAsync_WhileRecording_Throws_AndKeepsTheOldModel()
     {
-        var svc = Build(new FakeMic(), _ => new FakeEngine());
+        var built = new List<FakeEngine>();
+        var svc = Build(new FakeMic(), _ => { var e = new FakeEngine(); built.Add(e); return e; });
         await svc.WarmupAsync();
         svc.StartCapture("0");
 
         await Assert.That(async () => await svc.SwitchModelAsync(ModelB, CancellationToken.None))
             .Throws<InvalidOperationException>();
         await Assert.That(svc.CurrentModel.Id).IsEqualTo(ModelA.Id);
+        await Assert.That(built.Count).IsEqualTo(1);
+        await Assert.That(built[0].Disposed).IsFalse();
     }
 
     [Test]
@@ -220,13 +223,16 @@ public class AsrServiceTests
     [Test]
     public async Task SwitchModelAsync_ToTheSameModel_KeepsTheWarmEngine()
     {
-        var calls = 0;
-        var svc = Build(new FakeMic(), _ => { calls++; return new FakeEngine(); });
+        var built = new List<FakeEngine>();
+        var svc = Build(new FakeMic(), _ => { var e = new FakeEngine(); built.Add(e); return e; });
 
         await svc.WarmupAsync();
         await svc.SwitchModelAsync(ModelA, CancellationToken.None);
 
-        await Assert.That(calls).IsEqualTo(1);
+        // built.Count == 1 proves the factory ran once *and* that the original instance was
+        // neither replaced (no second build) nor disposed (still the only, live instance).
+        await Assert.That(built.Count).IsEqualTo(1);
+        await Assert.That(built[0].Disposed).IsFalse();
     }
 
     [Test]
@@ -239,5 +245,78 @@ public class AsrServiceTests
         svc.Dispose();
 
         await Assert.That(engine!.Disposed).IsTrue();
+    }
+
+    [Test]
+    public async Task StopAndRecognizeAsync_WithNoPriorWarmup_LazilyBuildsTheEngine()
+    {
+        var calls = 0;
+        var mic = new FakeMic();
+        mic.Pcm.AddRange(new float[16000]); // > 0.3 s @ 16 kHz
+        var svc = Build(mic, _ => { calls++; return new FakeEngine("готово"); });
+
+        AsrResult? captured = null;
+        svc.ResultReady += r => captured = r;
+
+        svc.StartCapture("0");
+        await svc.StopAndRecognizeAsync();
+
+        await Assert.That(calls).IsEqualTo(1);
+        await Assert.That(captured).IsNotNull();
+        await Assert.That(captured!.Text).IsEqualTo("готово");
+        await Assert.That(svc.State).IsEqualTo(AsrState.Idle);
+    }
+
+    [Test]
+    public async Task WarmupAsync_RacingSwitchModelAsync_EndsWithExactlyOneLiveEngine()
+    {
+        var built = new List<FakeEngine>();
+        var buildLock = new object();
+        var startedBuildingA = new ManualResetEventSlim(false);
+        var releaseBuildA = new ManualResetEventSlim(false);
+
+        var svc = Build(new FakeMic(), d =>
+        {
+            if (d.Id == ModelA.Id)
+            {
+                var e = new FakeEngine("A");
+                lock (buildLock) built.Add(e);
+                startedBuildingA.Set();
+                // Hold this build open long enough for SwitchModelAsync to attempt to run
+                // concurrently, so the two calls genuinely overlap rather than being
+                // incidentally serialised by scheduling luck.
+                var releasedInTime = releaseBuildA.Wait(TimeSpan.FromSeconds(5));
+                if (!releasedInTime) throw new TimeoutException("test setup: releaseBuildA was never signalled");
+                return e;
+            }
+            else
+            {
+                var e = new FakeEngine("B");
+                lock (buildLock) built.Add(e);
+                return e;
+            }
+        });
+
+        var warmupTask = svc.WarmupAsync();
+
+        var startedInTime = startedBuildingA.Wait(TimeSpan.FromSeconds(5));
+        await Assert.That(startedInTime).IsTrue();
+
+        // WarmupAsync is now blocked mid-build, holding the engine lock (if the fix is in
+        // place) with model A's factory call in flight. Fire a switch at the same time: with
+        // proper serialisation it queues behind the warm-up; without it, it races ahead and
+        // builds B against a still-null `engine` field, which is exactly the double-build /
+        // overwrite bug this test exists to catch.
+        var switchTask = svc.SwitchModelAsync(ModelB, CancellationToken.None);
+
+        releaseBuildA.Set();
+
+        await warmupTask;
+        await switchTask;
+
+        await Assert.That(built.Count).IsEqualTo(2);
+        await Assert.That(built[0].Disposed).IsTrue(); // model A: superseded, must be disposed
+        await Assert.That(built[1].Disposed).IsFalse(); // model B: the one live engine left
+        await Assert.That(svc.CurrentModel.Id).IsEqualTo(ModelB.Id);
     }
 }
