@@ -5,22 +5,26 @@ namespace MyASR;
 
 public partial class DownloadForm : Form
 {
-    private readonly IModelProvider _provider;
-    private readonly ModelPaths _paths;
-    private readonly ILogger<DownloadForm>? _logger;
-    private CancellationTokenSource? _cts;
+    private readonly IModelProvider provider;
+    private readonly ModelPaths paths;
+    private readonly ILogger<DownloadForm>? logger;
+    private CancellationTokenSource? cts;
 
+    // Дизайнер WinForms требует parameterless-конструктор для рендера формы.
     public DownloadForm()
     {
         InitializeComponent();
-        _provider = null!; _paths = null!;
+        provider = null!; paths = null!;
     }
 
-    public DownloadForm(IModelProvider provider, ModelPaths paths, ILogger<DownloadForm>? logger = null) : this()
+    public DownloadForm(IModelProvider provider, ModelPaths paths, ILogger<DownloadForm>? logger = null)
+        : this()
     {
-        _provider = provider; _paths = paths; _logger = logger;
+        this.provider = provider; this.paths = paths; this.logger = logger;
+        Text = $"Загрузка модели — {paths.Model.DisplayName}";
         _retry.Click += async (_, _) => await StartDownloadAsync();
         Load += async (_, _) => await StartDownloadAsync();
+        FormClosing += (_, _) => cts?.Cancel();
     }
 
     public bool DownloadSucceeded { get; private set; }
@@ -29,22 +33,26 @@ public partial class DownloadForm : Form
     {
         _retry.Visible = false;
         _progress.Value = 0;
-        _label.Text = "Скачивание моделей...";
-        _detail.Text = "";
+        _label.Text = $"Скачивание модели «{paths.Model.DisplayName}»...";
+        _detail.Text = paths.Model.LicenceNote ?? "";
 
-        _cts = new CancellationTokenSource();
+        cts = new CancellationTokenSource();
         var progress = new Progress<DownloadProgress>(OnProgress);
         try
         {
-            await _provider.EnsureDownloadedAsync(_paths, progress, _cts.Token);
+            await provider.EnsureDownloadedAsync(paths, progress, cts.Token);
             DownloadSucceeded = true;
             DialogResult = DialogResult.OK;
             Close();
         }
+        catch (OperationCanceledException)
+        {
+            DialogResult = DialogResult.Cancel;
+        }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Model download failed");
-            _label.Text = "Ошибка загрузки. Проверьте интернет и нажмите «Повторить».";
+            logger?.LogError(ex, "Model download failed for {ModelId}", paths.Model.Id);
+            _label.Text = "Ошибка загрузки. Проверьте источник и нажмите «Повторить».";
             _detail.Text = ex.Message;
             _retry.Visible = true;
         }
@@ -53,9 +61,8 @@ public partial class DownloadForm : Form
     private void OnProgress(DownloadProgress p)
     {
         if (InvokeRequired) { BeginInvoke(() => OnProgress(p)); return; }
-        _label.Text = $"{p.FileName} — {p.Downloaded / 1_000_000} / {p.Total / 1_000_000} MB";
-        _progress.Value = (int)Math.Clamp(p.Downloaded * 100.0 / Math.Max(1, p.Total), 0, 100);
-        var mbPerSec = p.BytesPerSecond / 1_000_000.0;
-        _detail.Text = mbPerSec > 0 ? $"{mbPerSec:F1} MB/s" : "";
+        _label.Text = DownloadProgressFormatter.Line(paths.Model, p);
+        _progress.Value = DownloadProgressFormatter.Percent(p);
+        _detail.Text = DownloadProgressFormatter.Speed(p);
     }
 }

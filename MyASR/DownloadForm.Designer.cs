@@ -67,7 +67,7 @@ partial class DownloadForm
         MinimizeBox = false;
         Name = "DownloadForm";
         StartPosition = FormStartPosition.CenterScreen;
-        Text = "Загрузка моделей";
+        Text = "Загрузка модели";
         ResumeLayout(false);
     }
 

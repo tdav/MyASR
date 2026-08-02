@@ -107,7 +107,7 @@ public partial class Main : Form
         if (!modelProvider.AreModelsAvailable(paths))
         {
             statusLabel.Text = "⏬ Загрузка моделей...";
-            using var dlg = sp.GetRequiredService<DownloadForm>();
+            using var dlg = sp.GetRequiredService<Func<ModelDescriptor, DownloadForm>>()(paths.Model);
             if (dlg.ShowDialog(this) != DialogResult.OK)
             {
                 MessageBox.Show("Модели не загружены — приложение будет закрыто.",

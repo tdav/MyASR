@@ -53,7 +53,10 @@ internal static class Program
             sp.GetRequiredService<Func<ModelDescriptor, IAsrEngine>>(),
             ModelCatalog.Default));
 
-        services.AddTransient<DownloadForm>();
+        services.AddSingleton<Func<ModelDescriptor, DownloadForm>>(sp => descriptor => new DownloadForm(
+            sp.GetRequiredService<IModelProvider>(),
+            sp.GetRequiredService<Func<ModelDescriptor, ModelPaths>>()(descriptor),
+            sp.GetService<ILogger<DownloadForm>>()));
         services.AddTransient<Main>();
 
         using var sp = services.BuildServiceProvider();
