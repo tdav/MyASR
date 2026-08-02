@@ -49,8 +49,8 @@ public partial class DownloadForm : Form
         catch (Exception ex)
         {
             logger?.LogError(ex, "Model download failed for {ModelId}", paths.Model.Id);
-            _label.Text = "Ошибка загрузки. Проверьте источник и нажмите «Повторить».";
-            _detail.Text = ex.Message;
+            _label.Text = "Не удалось получить модель. Проверьте источник и нажмите «Повторить».";
+            _detail.Text = DownloadProgressFormatter.FailureDetail(paths.Model, ex);
             _retry.Visible = true;
         }
     }

@@ -25,4 +25,15 @@ public static class DownloadProgressFormatter
         var mbPerSec = p.BytesPerSecond / 1_000_000.0;
         return mbPerSec > 0 ? string.Format(Ru, "{0:F1} MB/s", mbPerSec) : "";
     }
+
+    /// <summary>
+    /// What the dialog shows when acquisition fails. The exception names the source that was
+    /// tried; on its own that leaves the user with a path and no way to change it, so the
+    /// override variable is spelled out next to it.
+    /// </summary>
+    public static string FailureDetail(ModelDescriptor model, Exception ex) =>
+        $"{ex.Message}{Environment.NewLine}{Environment.NewLine}" +
+        $"Другой источник можно задать переменной окружения " +
+        $"{ModelSourceResolver.EnvVarName(model.Id)} " +
+        $"(папка, UNC-путь или базовый URL).";
 }
