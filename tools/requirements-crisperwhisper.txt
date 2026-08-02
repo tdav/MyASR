@@ -1,8 +1,22 @@
-optimum[exporters]>=1.24
+# Pinned to 1.27.0: optimum>=2.0's "exporters" extra has zero requires_dist entries
+# (a silent no-op) because ONNX export moved to the separate "optimum-onnx" package.
+# 1.27.0 is the last 1.x release and its "exporters" extra still bundles onnx and
+# onnxruntime directly, which is what tools/export_crisperwhisper_onnx.py's
+# `optimum.commands.optimum_cli` call relies on. It also caps transformers<4.54.0,
+# which is compatible with the >=4.46 floor below.
+optimum[exporters]==1.27.0
 onnx>=1.17
 onnxruntime>=1.20
 transformers>=4.46
-torch>=2.4
+# torch<2.9: optimum 1.27.0's exporters/onnx/model_patcher.py does
+# `from torch.onnx.symbolic_opset14 import _attention_scale, _causal_attention_mask,
+# _onnx_symbolic, ...` (unconditionally, no version guard). torch 2.9.0 turned
+# torch/onnx/symbolic_opset14.py into a backward-compat shim
+# (`from torch.onnx._internal.torchscript_exporter.symbolic_opset14 import *`), and a
+# wildcard import does not re-export underscore-prefixed names, so that import raises
+# `ImportError: cannot import name '_attention_scale'` on torch>=2.9. Confirmed by diffing
+# torch's symbolic_opset14.py between the v2.8.0 and v2.9.0 tags.
+torch>=2.4,<2.9
 numpy>=1.26
 soundfile>=0.12
 crisperwhisper==2.0.1
