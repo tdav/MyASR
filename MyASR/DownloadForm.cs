@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using MyASR.Models;
 
 namespace MyASR;
@@ -14,7 +14,7 @@ public partial class DownloadForm : Form
     public DownloadForm()
     {
         InitializeComponent();
-        provider = null!; paths = null!;
+        Icon = AppIcon.Get(); provider = null!; paths = null!;
     }
 
     public DownloadForm(IModelProvider provider, ModelPaths paths, ILogger<DownloadForm>? logger = null)

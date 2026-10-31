@@ -12,7 +12,6 @@ partial class Main
 
     private void InitializeComponent()
     {
-        System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Main));
         modelDescriptionLabel = new Label();
         modelCombo = new ComboBox();
         _deviceLabel = new Label();
@@ -30,58 +29,58 @@ partial class Main
         _modelLabel = new ToolStripStatusLabel();
         statusStrip1.SuspendLayout();
         SuspendLayout();
-        //
+        // 
         // modelDescriptionLabel
-        //
+        // 
         modelDescriptionLabel.Location = new Point(16, 22);
         modelDescriptionLabel.Name = "modelDescriptionLabel";
         modelDescriptionLabel.Size = new Size(80, 16);
         modelDescriptionLabel.TabIndex = 0;
         modelDescriptionLabel.Text = "Модель:";
-        //
+        // 
         // modelCombo
-        //
+        // 
         modelCombo.DropDownStyle = ComboBoxStyle.DropDownList;
         modelCombo.Location = new Point(102, 19);
         modelCombo.Name = "modelCombo";
         modelCombo.Size = new Size(574, 23);
         modelCombo.TabIndex = 1;
-        //
+        // 
         // _deviceLabel
-        //
+        // 
         _deviceLabel.Location = new Point(16, 51);
         _deviceLabel.Name = "_deviceLabel";
         _deviceLabel.Size = new Size(80, 16);
         _deviceLabel.TabIndex = 2;
         _deviceLabel.Text = "Микрофон:";
-        //
+        // 
         // _deviceCombo
-        //
+        // 
         _deviceCombo.DropDownStyle = ComboBoxStyle.DropDownList;
         _deviceCombo.Location = new Point(102, 48);
         _deviceCombo.Name = "_deviceCombo";
         _deviceCombo.Size = new Size(574, 23);
         _deviceCombo.TabIndex = 3;
-        //
+        // 
         // micButton
-        //
+        // 
         micButton.Location = new Point(16, 80);
         micButton.Name = "micButton";
         micButton.Size = new Size(160, 29);
         micButton.TabIndex = 4;
         micButton.Text = "Hold";
-        //
+        // 
         // _vuMeter
-        //
+        // 
         _vuMeter.BorderStyle = BorderStyle.FixedSingle;
         _vuMeter.Location = new Point(186, 83);
         _vuMeter.Name = "_vuMeter";
         _vuMeter.Size = new Size(490, 23);
         _vuMeter.TabIndex = 5;
         _vuMeter.Paint += OnVuPaint;
-        //
+        // 
         // resultBox
-        //
+        // 
         resultBox.Font = new Font("Segoe UI", 10F);
         resultBox.Location = new Point(16, 122);
         resultBox.Name = "resultBox";
@@ -89,33 +88,33 @@ partial class Main
         resultBox.Size = new Size(660, 272);
         resultBox.TabIndex = 6;
         resultBox.Text = "";
-        //
+        // 
         // clearBtn
-        //
+        // 
         clearBtn.Location = new Point(16, 406);
         clearBtn.Name = "clearBtn";
         clearBtn.Size = new Size(100, 30);
         clearBtn.TabIndex = 7;
         clearBtn.Text = "Очистить";
-        //
+        // 
         // copyBtn
-        //
+        // 
         copyBtn.Location = new Point(124, 406);
         copyBtn.Name = "copyBtn";
         copyBtn.Size = new Size(120, 30);
         copyBtn.TabIndex = 8;
         copyBtn.Text = "Скопировать";
-        //
+        // 
         // saveTxtBtn
-        //
+        // 
         saveTxtBtn.Location = new Point(252, 406);
         saveTxtBtn.Name = "saveTxtBtn";
         saveTxtBtn.Size = new Size(140, 30);
         saveTxtBtn.TabIndex = 9;
         saveTxtBtn.Text = "Сохранить TXT...";
-        //
+        // 
         // statusStrip1
-        //
+        // 
         statusStrip1.Items.AddRange(new ToolStripItem[] { statusLabel, _vuLabel, toolStripStatusLabel1, _modelLabel });
         statusStrip1.Location = new Point(0, 451);
         statusStrip1.Name = "statusStrip1";
@@ -125,7 +124,7 @@ partial class Main
         // statusLabel
         // 
         statusLabel.Name = "statusLabel";
-        statusLabel.Size = new Size(483, 17);
+        statusLabel.Size = new Size(575, 17);
         statusLabel.Spring = true;
         statusLabel.Text = "Статус: Idle";
         statusLabel.TextAlign = ContentAlignment.MiddleLeft;
@@ -147,7 +146,7 @@ partial class Main
         // 
         _modelLabel.ForeColor = SystemColors.GrayText;
         _modelLabel.Name = "_modelLabel";
-        _modelLabel.Size = new Size(114, 17);
+        _modelLabel.Size = new Size(19, 17);
         _modelLabel.Text = "—";
         // 
         // Main
@@ -166,11 +165,11 @@ partial class Main
         Controls.Add(copyBtn);
         Controls.Add(saveTxtBtn);
         Controls.Add(statusStrip1);
-        Icon = (Icon)resources.GetObject("$this.Icon");
+        FormBorderStyle = FormBorderStyle.FixedToolWindow;
         MinimumSize = new Size(220, 240);
         Name = "Main";
-        StartPosition = FormStartPosition.CenterParent;
-        Text = "MyASR — GigaAM v3 RNN-T";
+        StartPosition = FormStartPosition.CenterScreen;
+        Text = "MyASR";
         statusStrip1.ResumeLayout(false);
         statusStrip1.PerformLayout();
         ResumeLayout(false);

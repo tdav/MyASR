@@ -1,6 +1,9 @@
 namespace MyASR.Audio;
 
-public sealed record DeviceInfo(string Id, string FriendlyName);
+public sealed record DeviceInfo(string Id, string FriendlyName)
+{
+    public override string ToString() => FriendlyName;
+}
 
 public interface IMicCapture : IDisposable
 {

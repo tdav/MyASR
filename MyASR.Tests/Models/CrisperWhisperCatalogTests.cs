@@ -55,7 +55,8 @@ public class CrisperWhisperCatalogTests
     [Test]
     public async Task Default_IsStillGigaAm_BecauseRussianQualityIsUnverified()
     {
-        await Assert.That(ModelCatalog.Default.Id).IsEqualTo("gigaam-v3-rnnt");
+        await Assert.That(ModelCatalog.Default.Kind).IsEqualTo(AsrEngineKind.RnnT);
+        await Assert.That(ModelCatalog.Default.Id).IsEqualTo("gigaam-v3-e2e-rnnt-int8");
     }
 
     [Test]

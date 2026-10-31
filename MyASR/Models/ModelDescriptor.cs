@@ -27,4 +27,6 @@ public sealed record ModelDescriptor(
     IReadOnlyList<ModelFileEntry> Files)
 {
     public long TotalBytes => Files.Sum(f => f.Size);
+
+    public override string ToString() => DisplayName;
 }

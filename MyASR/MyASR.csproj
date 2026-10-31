@@ -2,7 +2,8 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -12,6 +13,14 @@
     <Platforms>AnyCPU;x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <_SuppressWinFormsTrimError>true</_SuppressWinFormsTrimError>
+    <OptimizationPreference>Speed</OptimizationPreference>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(_IsPublishing)' == 'true' and '$(Configuration)' == 'Release'">
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <PublishAot Condition="'$(PublishAot)' == ''">true</PublishAot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,14 +28,47 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.26.0" />
-    <PackageReference Include="NAudio.Wasapi" Version="22.0.0" />
-    <PackageReference Include="NAudio.Core" Version="2.3.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.7" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.7" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.7" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.7" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
+    <PackageReference Include="NAudio.Core" Version="3.3.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.14" />
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
   </ItemGroup>
+
+  <!--
+    Fallback MSVC + Windows SDK discovery for NativeAOT when Visual Studio Insiders / OneCore C++
+    tools are installed without the full Desktop C++ workload component ID expected by vswhere.
+  -->
+  <Target Name="ConfigureFallbackMsvcToolsForAot"
+          BeforeTargets="SetupOSSpecificProps"
+          Condition="'$(PublishAot)' == 'true' and '$(IlcUseEnvironmentalTools)' != 'true'">
+    <Exec Command="&quot;$([System.Environment]::GetEnvironmentVariable('ProgramFiles(x86)'))\Microsoft Visual Studio\Installer\vswhere.exe&quot; -latest -prerelease -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath"
+          IgnoreExitCode="true"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_StandardVcInstallPath" />
+    </Exec>
+
+    <Exec Condition="'$(_StandardVcInstallPath)' == ''"
+          Command="powershell -NoProfile -Command &quot;$pf86 = [Environment]::GetFolderPath('ProgramFilesX86'); $vs = &amp; (Join-Path $pf86 'Microsoft Visual Studio\Installer\vswhere.exe') -latest -prerelease -products * -property installationPath; if ($vs) { $link = Get-ChildItem -Path (Join-Path $vs 'VC\Tools\MSVC') -Filter 'link.exe' -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match 'Hostx64\\x64\\link\.exe$' } | Sort-Object FullName -Descending | Select-Object -First 1; $msvcRoot = $link.Directory.Parent.Parent.Parent.FullName; $msvcLib = if (Test-Path (Join-Path $msvcRoot 'lib\x64\msvcrt.lib')) { Join-Path $msvcRoot 'lib\x64' } else { Join-Path $msvcRoot 'lib\onecore\x64' }; $kitVer = Get-ChildItem -Path (Join-Path $pf86 'Windows Kits\10\Lib') -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName 'um\x64\kernel32.lib') } | Sort-Object Name -Descending | Select-Object -First 1; if ($link -and $kitVer) { Write-Output ($link.FullName + '|' + $msvcLib + ';' + (Join-Path $kitVer.FullName 'ucrt\x64') + ';' + (Join-Path $kitVer.FullName 'um\x64')) } }&quot;"
+          IgnoreExitCode="true"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_FallbackMsvcSpec" />
+    </Exec>
+
+    <PropertyGroup Condition="'$(_StandardVcInstallPath)' == '' and $([System.String]::Copy('$(_FallbackMsvcSpec)').Contains('|'))">
+      <IlcUseEnvironmentalTools>true</IlcUseEnvironmentalTools>
+      <CppLinker>$(_FallbackMsvcSpec.Split('|')[0])</CppLinker>
+      <_FallbackLibDirs>$(_FallbackMsvcSpec.Split('|')[1])</_FallbackLibDirs>
+    </PropertyGroup>
+
+    <ItemGroup Condition="'$(_FallbackLibDirs)' != ''">
+      <AdditionalNativeLibraryDirectories Include="$(_FallbackLibDirs.Split(';'))" />
+      <LinkerArg Include="@(AdditionalNativeLibraryDirectories->'/LIBPATH:&quot;%(Identity)&quot;')" />
+    </ItemGroup>
+  </Target>
 
 </Project>

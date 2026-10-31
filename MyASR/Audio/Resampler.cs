@@ -33,8 +33,8 @@ public static class Resampler
         var output = new List<float>(samples.Length);
         var buffer = new float[8192];
         int n;
-        while ((n = resampled.Read(buffer, 0, buffer.Length)) > 0)
-            output.AddRange(buffer.AsSpan(0, n).ToArray());
+        while ((n = resampled.Read(buffer.AsSpan())) > 0)
+            output.AddRange(buffer.AsSpan(0, n));
         return [.. output];
     }
 }

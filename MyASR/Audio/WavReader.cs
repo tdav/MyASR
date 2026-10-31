@@ -17,8 +17,8 @@ public static class WavReader
         var samples = new List<float>(checked((int)(reader.Length / Math.Max(1, reader.WaveFormat.BlockAlign))));
         var buf = new float[8192];
         int n;
-        while ((n = sp.Read(buf, 0, buf.Length)) > 0)
-            samples.AddRange(buf.AsSpan(0, n).ToArray());
+        while ((n = sp.Read(buf.AsSpan())) > 0)
+            samples.AddRange(buf.AsSpan(0, n));
         return [.. samples];
     }
 }

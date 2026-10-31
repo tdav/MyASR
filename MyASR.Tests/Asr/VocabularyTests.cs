@@ -44,4 +44,30 @@ public class VocabularyTests
         var text = vocab.Decode([33, 16, 33, 17, 33]);
         await Assert.That(text).IsEqualTo("пр");
     }
+
+    [Test]
+    public async Task Decode_SentencePieceBpeSubwords_ReplacesLeadingUnderscoreAndSkipsUnk()
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), $"bpe-vocab-{Guid.NewGuid()}.txt");
+        try
+        {
+            File.WriteAllLines(tmp,
+            [
+                "<unk> 0",
+                ", 1",
+                "? 2",
+                "▁Привет 3",
+                "▁как 4",
+                "▁дела 5",
+                "<blk> 6"
+            ]);
+            var vocab = Vocabulary.Load(tmp);
+            var text = vocab.Decode([0, 3, 1, 4, 5, 2, 6]);
+            await Assert.That(text).IsEqualTo(" Привет, как дела?");
+        }
+        finally
+        {
+            if (File.Exists(tmp)) File.Delete(tmp);
+        }
+    }
 }

@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using MyASR.Asr;
 using MyASR.Audio;
 using MyASR.Hotkeys;
@@ -55,7 +55,7 @@ public partial class Main : Form
     public Main()
     {
         InitializeComponent();
-        asr = null!; mic = null!;
+        Icon = AppIcon.Get(); asr = null!; mic = null!;
         modelProvider = null!; pathsFor = null!; downloadFormFor = null!; hotkeys = null!;
     }
 
@@ -100,12 +100,17 @@ public partial class Main : Form
 
         modelCombo.SelectedIndexChanged += async (_, _) => await OnModelSelectedAsync();
 
+        Opacity = 0;
         Shown += async (_, _) => await OnFormShownAsync();
         FormClosed += (_, _) => Cleanup();
     }
 
     private async Task OnFormShownAsync()
     {
+        using var splash = new SplashForm();
+        splash.Show();
+        splash.ReportStage("Поиск микрофонов и конфигурации...", 0.15);
+
         PopulateDevices();
         if (settings.MicDeviceId is { } savedId)
         {
@@ -123,17 +128,39 @@ public partial class Main : Form
 
         LegacyModelLayout.Migrate(ModelRoot.Resolve(), ModelCatalog.GigaAmV3, logger);
 
-        if (!await EnsureModelPresentAsync(selectedModel))
+        splash.ReportStage($"Проверка файлов модели «{selectedModel.DisplayName}»...", 0.35);
+        var modelPaths = pathsFor(selectedModel);
+        if (!modelProvider.AreModelsAvailable(modelPaths))
         {
-            MessageBox.Show("Модель не загружена — приложение будет закрыто.",
-                            "MyASR", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            Close();
+            splash.Hide();
+            if (!await EnsureModelPresentAsync(selectedModel))
+            {
+                splash.Close();
+                MessageBox.Show("Модель не загружена — приложение будет закрыто.",
+                                "MyASR", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Close();
+                return;
+            }
+            splash.Show();
+        }
+
+        splash.ReportStage($"Загрузка нейросети «{selectedModel.DisplayName}» в память...", 0.68);
+        if (!await WarmUpAsync(selectedModel, closeOnFailure: true))
+        {
+            splash.Close();
             return;
         }
 
-        if (!await WarmUpAsync(selectedModel, closeOnFailure: true)) return;
-
+        splash.ReportStage("Регистрация глобальных клавиш...", 0.92);
         hotkeyRegistered = hotkeys.Register(Handle, HotkeyId, _hotkeyMod, _hotkeyVk);
+        splash.ReportStage("Готово к работе", 1.0);
+        await Task.Delay(120);
+        splash.Close();
+
+        Opacity = 1;
+        BringToFront();
+        Activate();
+
         if (!hotkeyRegistered)
         {
             logger?.LogWarning("Не удалось зарегистрировать глобальный хоткей {Hotkey}", settings.Hotkey);
@@ -154,9 +181,10 @@ public partial class Main : Form
     private void PopulateModels()
     {
         suppressModelComboEvent = true;
-        modelCombo.DataSource = ModelCatalog.All.ToList();
-        modelCombo.DisplayMember = nameof(ModelDescriptor.DisplayName);
-        modelCombo.SelectedIndex = Math.Max(0, ModelSelectionPolicy.IndexOf(ModelCatalog.All, selectedModel.Id));
+        modelCombo.Items.Clear();
+        foreach (var m in ModelCatalog.All) modelCombo.Items.Add(m);
+        if (modelCombo.Items.Count > 0)
+            modelCombo.SelectedIndex = Math.Max(0, ModelSelectionPolicy.IndexOf(ModelCatalog.All, selectedModel.Id));
         suppressModelComboEvent = false;
     }
 
@@ -283,10 +311,12 @@ public partial class Main : Form
         {
             statusLabel.Text = ModelSelectionPolicy.NoModelLoadedStatusText();
             _modelLabel.Text = "—";
+            Text = "MyASR";
             return;
         }
         statusLabel.Text = ModelSelectionPolicy.StatusText(selectedModel, hotkeyRegistered, settings.Hotkey);
         _modelLabel.Text = selectedModel.DisplayName;
+        Text = $"MyASR — {selectedModel.DisplayName}";
     }
 
     protected override void WndProc(ref Message m)
@@ -372,8 +402,8 @@ public partial class Main : Form
 
     private void PopulateDevices()
     {
-        _deviceCombo.DataSource = mic.EnumerateDevices().ToList();
-        _deviceCombo.DisplayMember = nameof(DeviceInfo.FriendlyName);
+        _deviceCombo.Items.Clear();
+        foreach (var d in mic.EnumerateDevices()) _deviceCombo.Items.Add(d);
         if (_deviceCombo.Items.Count > 0) _deviceCombo.SelectedIndex = 0;
     }
 

@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 using MyASR.Models;
 
@@ -25,7 +26,7 @@ public sealed class UserSettings
         try
         {
             if (File.Exists(Path))
-                return JsonSerializer.Deserialize<UserSettings>(File.ReadAllText(Path)) ?? new();
+                return JsonSerializer.Deserialize(File.ReadAllText(Path), MyAsrJsonContext.Default.UserSettings) ?? new();
         }
         catch { /* corrupt file → defaults */ }
         return new UserSettings();
@@ -34,6 +35,6 @@ public sealed class UserSettings
     public void Save()
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
-        File.WriteAllText(Path, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(Path, JsonSerializer.Serialize(this, MyAsrJsonContext.Default.UserSettings));
     }
 }

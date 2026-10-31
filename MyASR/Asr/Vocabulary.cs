@@ -5,6 +5,7 @@ namespace MyASR.Asr;
 public sealed class Vocabulary
 {
     private const string BlankToken = "<blk>";
+    private const string UnkToken = "<unk>";
     private const string SpaceMarker = "▁";
 
     private readonly string[] _tokens;
@@ -40,7 +41,8 @@ public sealed class Vocabulary
         {
             if (id == BlankIndex) continue;
             var t = _tokens[id];
-            sb.Append(t == SpaceMarker ? " " : t);
+            if (t == UnkToken) continue;
+            sb.Append(t.Replace(SpaceMarker, " "));
         }
         return sb.ToString();
     }

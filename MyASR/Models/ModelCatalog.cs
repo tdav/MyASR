@@ -15,19 +15,64 @@ public static class ModelCatalog
 {
     private const string GigaAmBase = "https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/";
 
+    public static readonly ModelDescriptor GigaAmV3E2eInt8 = new(
+        Id: "gigaam-v3-e2e-rnnt-int8",
+        DisplayName: "GigaAM v3 e2e (RU, RNN-T, int8 — с пунктуацией)",
+        LicenceNote: null,
+        Kind: AsrEngineKind.RnnT,
+        FolderName: "gigaam-v3-e2e-int8",
+        DefaultBaseUri: GigaAmBase,
+        Files:
+        [
+            new(GigaAmFiles.Encoder, "v3_e2e_rnnt_encoder.int8.onnx", 224_570_477, null),
+            new(GigaAmFiles.Decoder, "v3_e2e_rnnt_decoder.int8.onnx", 1_159_170,   null),
+            new(GigaAmFiles.Joint,   "v3_e2e_rnnt_joint.int8.onnx",   687_791,     null),
+            new(GigaAmFiles.Vocab,   "v3_e2e_rnnt_vocab.txt",         13_354,      null),
+        ]);
+
+    public static readonly ModelDescriptor GigaAmV3E2eFp32 = new(
+        Id: "gigaam-v3-e2e-rnnt-fp32",
+        DisplayName: "GigaAM v3 e2e (RU, RNN-T, fp32 — с пунктуацией)",
+        LicenceNote: null,
+        Kind: AsrEngineKind.RnnT,
+        FolderName: "gigaam-v3-e2e-fp32",
+        DefaultBaseUri: GigaAmBase,
+        Files:
+        [
+            new(GigaAmFiles.Encoder, "v3_e2e_rnnt_encoder.onnx", 885_084_534, null),
+            new(GigaAmFiles.Decoder, "v3_e2e_rnnt_decoder.onnx", 4_599_910,   null),
+            new(GigaAmFiles.Joint,   "v3_e2e_rnnt_joint.onnx",   2_712_896,   null),
+            new(GigaAmFiles.Vocab,   "v3_e2e_rnnt_vocab.txt",    13_354,      null),
+        ]);
+
+    public static readonly ModelDescriptor GigaAmV3Int8 = new(
+        Id: "gigaam-v3-rnnt-int8",
+        DisplayName: "GigaAM v3 (RU, RNN-T, int8 — без пунктуации)",
+        LicenceNote: null,
+        Kind: AsrEngineKind.RnnT,
+        FolderName: "gigaam-v3-int8",
+        DefaultBaseUri: GigaAmBase,
+        Files:
+        [
+            new(GigaAmFiles.Encoder, "v3_rnnt_encoder.int8.onnx", 224_570_473, null),
+            new(GigaAmFiles.Decoder, "v3_rnnt_decoder.int8.onnx", 842_048,     null),
+            new(GigaAmFiles.Joint,   "v3_rnnt_joint.int8.onnx",   366_698,     null),
+            new(GigaAmFiles.Vocab,   GigaAmFiles.Vocab,           198,         null),
+        ]);
+
     // SHA-256 digests stay null until known-good hashes are captured after a first download.
     public static readonly ModelDescriptor GigaAmV3 = new(
         Id: "gigaam-v3-rnnt",
-        DisplayName: "GigaAM v3 (RU, RNN-T)",
+        DisplayName: "GigaAM v3 (RU, RNN-T, fp32 — без пунктуации)",
         LicenceNote: null,
         Kind: AsrEngineKind.RnnT,
         FolderName: "gigaam-v3",
         DefaultBaseUri: GigaAmBase,
         Files:
         [
-            new(GigaAmFiles.Encoder, GigaAmFiles.Encoder, 928_000_000, null),
-            new(GigaAmFiles.Decoder, GigaAmFiles.Decoder, 3_490_000,   null),
-            new(GigaAmFiles.Joint,   GigaAmFiles.Joint,   1_510_000,   null),
+            new(GigaAmFiles.Encoder, GigaAmFiles.Encoder, 885_084_534, null),
+            new(GigaAmFiles.Decoder, GigaAmFiles.Decoder, 3_331_429,   null),
+            new(GigaAmFiles.Joint,   GigaAmFiles.Joint,   1_440_448,   null),
             new(GigaAmFiles.Vocab,   GigaAmFiles.Vocab,   198,         null),
         ]);
 
@@ -84,9 +129,9 @@ public static class ModelCatalog
         ]);
 
     public static IReadOnlyList<ModelDescriptor> All { get; } =
-        [GigaAmV3, CrisperWhisperSmallInt8, CrisperWhisperSmallFp32];
+        [GigaAmV3E2eInt8, GigaAmV3E2eFp32, GigaAmV3Int8, GigaAmV3, CrisperWhisperSmallInt8, CrisperWhisperSmallFp32];
 
-    public static ModelDescriptor Default => GigaAmV3;
+    public static ModelDescriptor Default => GigaAmV3E2eInt8;
 
     /// <summary>Looks a model up by its persisted id, falling back to <see cref="Default"/>.</summary>
     public static ModelDescriptor ById(string? id) =>

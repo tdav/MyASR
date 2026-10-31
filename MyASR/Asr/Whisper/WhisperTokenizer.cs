@@ -33,7 +33,7 @@ public sealed class WhisperTokenizer
 
     private static void Merge(Dictionary<string, int> into, string jsonPath)
     {
-        var parsed = JsonSerializer.Deserialize<Dictionary<string, int>>(File.ReadAllText(jsonPath))
+        var parsed = JsonSerializer.Deserialize(File.ReadAllText(jsonPath), MyAsrJsonContext.Default.DictionaryStringInt32)
                      ?? throw new InvalidDataException($"Не удалось прочитать словарь: {jsonPath}");
         foreach (var (token, id) in parsed) into[token] = id;
     }

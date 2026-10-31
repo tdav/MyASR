@@ -1,4 +1,4 @@
-namespace MyASR;
+﻿namespace MyASR;
 
 partial class DownloadForm
 {
@@ -20,39 +20,34 @@ partial class DownloadForm
         // 
         // _label
         // 
-        // Two lines, wrapping rather than ellipsing: the failure text is the only thing that
-        // tells the user what to do, so truncating it defeats the dialog's purpose.
         _label.Location = new Point(16, 15);
         _label.Name = "_label";
         _label.Size = new Size(412, 36);
         _label.TabIndex = 0;
         _label.Text = "Подготовка...";
-        //
+        // 
         // _progress
-        //
+        // 
         _progress.Location = new Point(16, 57);
         _progress.Name = "_progress";
         _progress.Size = new Size(524, 24);
         _progress.Style = ProgressBarStyle.Continuous;
         _progress.TabIndex = 1;
-        //
+        // 
         // _detail
-        //
-        // Read-only text box rather than a label: on failure this carries the source path, which
-        // is both long enough to need several lines and the one thing worth copying.
+        // 
         _detail.BackColor = SystemColors.Control;
         _detail.BorderStyle = BorderStyle.None;
         _detail.ForeColor = SystemColors.GrayText;
         _detail.Location = new Point(16, 89);
-        _detail.Multiline = true;
         _detail.Name = "_detail";
         _detail.ReadOnly = true;
         _detail.ScrollBars = ScrollBars.Vertical;
-        _detail.Size = new Size(524, 56);
+        _detail.Size = new Size(524, 16);
         _detail.TabIndex = 2;
-        //
+        // 
         // _retry
-        //
+        // 
         _retry.Location = new Point(440, 15);
         _retry.Name = "_retry";
         _retry.Size = new Size(100, 30);
@@ -64,19 +59,19 @@ partial class DownloadForm
         // 
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(556, 157);
+        ClientSize = new Size(556, 100);
         Controls.Add(_label);
         Controls.Add(_progress);
         Controls.Add(_detail);
         Controls.Add(_retry);
         FormBorderStyle = FormBorderStyle.FixedDialog;
-        Icon = MyASR.AppIcon.Get();
         MaximizeBox = false;
         MinimizeBox = false;
         Name = "DownloadForm";
         StartPosition = FormStartPosition.CenterScreen;
         Text = "Загрузка модели";
         ResumeLayout(false);
+        PerformLayout();
     }
 
     private Label _label;

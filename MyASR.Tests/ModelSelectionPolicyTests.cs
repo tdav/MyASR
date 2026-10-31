@@ -69,8 +69,12 @@ public class ModelSelectionPolicyTests
     [Test]
     public async Task IndexOf_FindsMatchingId()
     {
-        var idx = ModelSelectionPolicy.IndexOf(ModelCatalog.All, ModelCatalog.GigaAmV3.Id);
-        await Assert.That(idx).IsEqualTo(0);
+        var defaultIdx = ModelSelectionPolicy.IndexOf(ModelCatalog.All, ModelCatalog.Default.Id);
+        await Assert.That(defaultIdx).IsEqualTo(0);
+
+        var legacyIdx = ModelSelectionPolicy.IndexOf(ModelCatalog.All, ModelCatalog.GigaAmV3.Id);
+        await Assert.That(legacyIdx).IsGreaterThanOrEqualTo(0);
+        await Assert.That(ModelCatalog.All[legacyIdx].Id).IsEqualTo(ModelCatalog.GigaAmV3.Id);
     }
 
     [Test]
