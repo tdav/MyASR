@@ -59,7 +59,7 @@ partial class DownloadForm
         // 
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(556, 100);
+        ClientSize = new Size(556, 116);
         Controls.Add(_label);
         Controls.Add(_progress);
         Controls.Add(_detail);

@@ -43,7 +43,7 @@ partial class Main
         modelCombo.DropDownStyle = ComboBoxStyle.DropDownList;
         modelCombo.Location = new Point(102, 19);
         modelCombo.Name = "modelCombo";
-        modelCombo.Size = new Size(574, 23);
+        modelCombo.Size = new Size(639, 23);
         modelCombo.TabIndex = 1;
         // 
         // _deviceLabel
@@ -59,7 +59,7 @@ partial class Main
         _deviceCombo.DropDownStyle = ComboBoxStyle.DropDownList;
         _deviceCombo.Location = new Point(102, 48);
         _deviceCombo.Name = "_deviceCombo";
-        _deviceCombo.Size = new Size(574, 23);
+        _deviceCombo.Size = new Size(639, 23);
         _deviceCombo.TabIndex = 3;
         // 
         // micButton
@@ -75,7 +75,7 @@ partial class Main
         _vuMeter.BorderStyle = BorderStyle.FixedSingle;
         _vuMeter.Location = new Point(186, 83);
         _vuMeter.Name = "_vuMeter";
-        _vuMeter.Size = new Size(490, 23);
+        _vuMeter.Size = new Size(555, 23);
         _vuMeter.TabIndex = 5;
         _vuMeter.Paint += OnVuPaint;
         // 
@@ -85,7 +85,7 @@ partial class Main
         resultBox.Location = new Point(16, 122);
         resultBox.Name = "resultBox";
         resultBox.ReadOnly = true;
-        resultBox.Size = new Size(660, 272);
+        resultBox.Size = new Size(725, 272);
         resultBox.TabIndex = 6;
         resultBox.Text = "";
         // 
@@ -116,15 +116,15 @@ partial class Main
         // statusStrip1
         // 
         statusStrip1.Items.AddRange(new ToolStripItem[] { statusLabel, _vuLabel, toolStripStatusLabel1, _modelLabel });
-        statusStrip1.Location = new Point(0, 451);
+        statusStrip1.Location = new Point(0, 449);
         statusStrip1.Name = "statusStrip1";
-        statusStrip1.Size = new Size(689, 22);
+        statusStrip1.Size = new Size(753, 22);
         statusStrip1.TabIndex = 10;
         // 
         // statusLabel
         // 
         statusLabel.Name = "statusLabel";
-        statusLabel.Size = new Size(575, 17);
+        statusLabel.Size = new Size(639, 17);
         statusLabel.Spring = true;
         statusLabel.Text = "Статус: Idle";
         statusLabel.TextAlign = ContentAlignment.MiddleLeft;
@@ -153,7 +153,7 @@ partial class Main
         // 
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(689, 473);
+        ClientSize = new Size(753, 471);
         Controls.Add(modelDescriptionLabel);
         Controls.Add(modelCombo);
         Controls.Add(_deviceLabel);
