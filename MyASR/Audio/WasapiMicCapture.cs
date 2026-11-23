@@ -7,10 +7,8 @@ namespace MyASR.Audio;
 /// NativeAOT-compatible WASAPI microphone enumerator and event-driven capture using direct COM
 /// vtable calls instead of classic [ComImport] RCWs.
 /// </summary>
-public sealed unsafe class WasapiMicCapture : IMicCapture
+public sealed unsafe class WasapiMicCapture : ILiveMicCapture
 {
-    private const int RingCapacity = 16000 * 31; // 31 sec headroom
-
     private const uint ClsctxAll = 23;
     private const uint CoinitMultithreaded = 0;
     private const int RpcEChangedMode = unchecked((int)0x80010106);
@@ -35,12 +33,15 @@ public sealed unsafe class WasapiMicCapture : IMicCapture
     private static readonly PropertyKey PkeyDeviceFriendlyName = new(
         new Guid("A45C254E-DF1C-4EFD-8020-67D146A850E0"), 14);
 
-    private readonly AudioRingBuffer ring = new(RingCapacity);
+    private readonly RecordingBuffer recording = new();
+    private Exception? captureError;
     private Thread? captureThread;
     private nint stopEvent;
     private volatile float rmsDb = -120f;
 
     public double CurrentRmsDb => rmsDb;
+    public int CapturedSampleCount => recording.SampleCount;
+    public float[] ReadSamples(int start, int count) => recording.ReadSamples(start, count);
 
     public IReadOnlyList<DeviceInfo> EnumerateDevices()
     {
@@ -109,12 +110,12 @@ public sealed unsafe class WasapiMicCapture : IMicCapture
             throw new InvalidOperationException("Failed to create WASAPI stop event.");
 
         using var ready = new ManualResetEventSlim(false);
-        Exception? initError = null;
+        captureError = null;
 
-        ring.Reset();
+        recording.Clear();
         rmsDb = -120f;
 
-        captureThread = new Thread(() => CaptureLoop(deviceId, stopEvent, ready, ex => initError = ex))
+        captureThread = new Thread(() => CaptureLoop(deviceId, stopEvent, ready, ex => captureError = ex))
         {
             IsBackground = true,
             Name = "MyASR-WASAPI-Capture"
@@ -122,7 +123,7 @@ public sealed unsafe class WasapiMicCapture : IMicCapture
         captureThread.Start();
         ready.Wait();
 
-        if (initError is not null)
+        if (captureError is { } initError)
         {
             Stop();
             throw new InvalidOperationException($"Не удалось запустить захват микрофона: {initError.Message}", initError);
@@ -132,7 +133,12 @@ public sealed unsafe class WasapiMicCapture : IMicCapture
     public float[] StopAndDrain()
     {
         Stop();
-        return ring.Snapshot();
+        if (captureError is { } error)
+        {
+            recording.Clear();
+            throw new InvalidOperationException($"Ошибка захвата микрофона: {error.Message}", error);
+        }
+        return recording.Drain();
     }
 
     public static float[] DecodeWaveBuffer(WaveFormat fmt, ReadOnlySpan<byte> bytes, bool silent)
@@ -176,6 +182,7 @@ public sealed unsafe class WasapiMicCapture : IMicCapture
         void* captureClient = null;
         WaveFormatEx* mixFormatPtr = null;
         nint sampleEvent = 0;
+        bool initialized = false;
 
         try
         {
@@ -231,6 +238,7 @@ public sealed unsafe class WasapiMicCapture : IMicCapture
             // IAudioClient::Start (slot 10)
             CheckHr(((delegate* unmanaged[Stdcall]<void*, int>)clientVtbl[10])(audioClient), "IAudioClient::Start");
 
+            initialized = true;
             ready.Set();
 
             var handles = stackalloc nint[2] { stopHandle, sampleEvent };
@@ -239,14 +247,17 @@ public sealed unsafe class WasapiMicCapture : IMicCapture
             while (true)
             {
                 var wait = WaitForMultipleObjects(2, handles, bWaitAll: 0, dwMilliseconds: 200);
-                if (wait == 0) break; // stopHandle signaled
+                bool stopping = wait == 0;
+                if (stopping)
+                    ((delegate* unmanaged[Stdcall]<void*, int>)clientVtbl[11])(audioClient); // Stop before draining
 
                 while (true)
                 {
                     uint packetFrames = 0;
                     // IAudioCaptureClient::GetNextPacketSize (slot 5)
                     var hr = ((delegate* unmanaged[Stdcall]<void*, uint*, int>)capVtbl[5])(captureClient, &packetFrames);
-                    if (hr < 0 || packetFrames == 0) break;
+                    CheckHr(hr, "IAudioCaptureClient::GetNextPacketSize");
+                    if (packetFrames == 0) break;
 
                     byte* dataPtr = null;
                     uint numFrames = 0;
@@ -257,7 +268,7 @@ public sealed unsafe class WasapiMicCapture : IMicCapture
                     // IAudioCaptureClient::GetBuffer (slot 3)
                     hr = ((delegate* unmanaged[Stdcall]<void*, byte**, uint*, uint*, ulong*, ulong*, int>)capVtbl[3])(
                         captureClient, &dataPtr, &numFrames, &flags, &devPos, &qpcPos);
-                    if (hr < 0) break;
+                    CheckHr(hr, "IAudioCaptureClient::GetBuffer");
 
                     try
                     {
@@ -268,7 +279,7 @@ public sealed unsafe class WasapiMicCapture : IMicCapture
                             var rawSpan = dataPtr is not null ? new ReadOnlySpan<byte>(dataPtr, byteLen) : new byte[byteLen];
                             var samples = DecodeWaveBuffer(waveFormat, rawSpan, silent);
                             var mono16 = Resampler.ToMono16k(waveFormat, samples);
-                            ring.Write(mono16);
+                            recording.Append(mono16);
                             rmsDb = (float)ComputeRmsDb(mono16);
                         }
                     }
@@ -278,15 +289,13 @@ public sealed unsafe class WasapiMicCapture : IMicCapture
                         ((delegate* unmanaged[Stdcall]<void*, uint, int>)capVtbl[4])(captureClient, numFrames);
                     }
                 }
+                if (stopping) break;
             }
-
-            // IAudioClient::Stop (slot 11)
-            ((delegate* unmanaged[Stdcall]<void*, int>)clientVtbl[11])(audioClient);
         }
         catch (Exception ex)
         {
             reportError(ex);
-            ready.Set();
+            if (!initialized) ready.Set();
         }
         finally
         {
@@ -403,7 +412,7 @@ public sealed unsafe class WasapiMicCapture : IMicCapture
         if (stopEvent != 0)
         {
             SetEvent(stopEvent);
-            captureThread?.Join(TimeSpan.FromSeconds(2));
+            captureThread?.Join();
             captureThread = null;
             CloseHandle(stopEvent);
             stopEvent = 0;

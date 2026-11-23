@@ -16,6 +16,17 @@ public class SettingsTests
     }
 
     [Test]
+    public async Task ThemePreference_SupportsLegacySettingsAndRoundTrips()
+    {
+        var context = MyAsrJsonContext.Default.UserSettings;
+        var settings = JsonSerializer.Deserialize("{}", context)!;
+        await Assert.That(settings.DarkTheme).IsFalse();
+        settings.DarkTheme = true;
+        var saved = JsonSerializer.Serialize(settings, context);
+        await Assert.That(JsonSerializer.Deserialize(saved, context)!.DarkTheme).IsTrue();
+    }
+
+    [Test]
     public async Task ModelId_RoundTripsThroughJson()
     {
         var s = new UserSettings { ModelId = "crisperwhisper2-small-int8" };

@@ -5,6 +5,9 @@ using MyASR.Asr.Whisper;
 using MyASR.Audio;
 using MyASR.Hotkeys;
 using MyASR.Models;
+using System.ComponentModel;
+using System.Windows;
+using System.Windows.Threading;
 using System.IO;
 using System.Net.Http;
 
@@ -15,8 +18,6 @@ internal static class Program
     [STAThread]
     static void Main()
     {
-        ApplicationConfiguration.Initialize();
-
         var services = new ServiceCollection();
         services.AddLogging(b =>
         {
@@ -60,8 +61,52 @@ internal static class Program
         services.AddTransient<Main>();
 
         using var sp = services.BuildServiceProvider();
-        var form = sp.GetRequiredService<Main>();
-        Application.Run(form);
+        var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        AppTheme.Apply(app, UserSettings.Load().DarkTheme);
+        var splash = new SplashForm();
+        using var startup = new CancellationTokenSource();
+        splash.Closing += CancelStartup;
+        splash.ContentRendered += StartMainWindow;
+        app.Run(splash);
+
+        void CancelStartup(object? sender, CancelEventArgs e)
+        {
+            e.Cancel = true;
+            startup.Cancel();
+            splash.ReportCancellation();
+        }
+
+        async void StartMainWindow(object? sender, EventArgs e)
+        {
+            splash.ContentRendered -= StartMainWindow;
+            try
+            {
+                startup.Token.ThrowIfCancellationRequested();
+                var main = sp.GetRequiredService<Main>();
+                if (!await main.PrepareAsync(splash, startup.Token)) return;
+                splash.ReportReady();
+                await Dispatcher.Yield(DispatcherPriority.Background);
+                startup.Token.ThrowIfCancellationRequested();
+                app.MainWindow = main;
+                main.Show();
+                app.ShutdownMode = ShutdownMode.OnMainWindowClose;
+            }
+            catch (OperationCanceledException) when (startup.IsCancellationRequested) { }
+            catch (Exception ex)
+            {
+                if (!startup.IsCancellationRequested)
+                {
+                    System.Diagnostics.Trace.TraceError("Ошибка запуска MyASR: {0}", ex);
+                    new ErrorWindow("Не удалось подготовить диктовку", ex.Message) { Owner = splash }.ShowDialog();
+                }
+            }
+            finally
+            {
+                splash.Closing -= CancelStartup;
+                splash.Close();
+                if (app.ShutdownMode == ShutdownMode.OnExplicitShutdown) app.Shutdown();
+            }
+        }
     }
 
     private static void AddFileLogging(ILoggingBuilder b)

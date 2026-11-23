@@ -1,71 +1,49 @@
-using System.IO;
-using MyASR;
+using System.Windows.Media.Imaging;
+using TUnit.Core.Executors;
 
 namespace MyASR.Tests;
 
 public class BrandingAndSplashTests
 {
-    [Test]
-    public async Task AppIcon_Render_DrawsSquircleWithTransparentCornersAndBrightCenter()
+    [Test, STAThreadExecutor]
+    public async Task ShippedIcon_ContainsSmallAndHighResolutionFrames()
     {
-        using var bmp = AppIcon.Render(256);
-        await Assert.That(bmp.Width).IsEqualTo(256);
-        await Assert.That(bmp.Height).IsEqualTo(256);
+        using var stream = System.Windows.Application.GetResourceStream(
+            new Uri("/MyASR;component/icon.ico", UriKind.Relative)).Stream;
+        var icon = BitmapDecoder.Create(stream,
+            BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
 
-        // Squircle corners must remain transparent.
-        var corner = bmp.GetPixel(1, 1);
-        await Assert.That((int)corner.A).IsEqualTo(0);
-
-        // Center microphone capsule must be bright and opaque.
-        var center = bmp.GetPixel(128, 96);
-        await Assert.That((int)center.A).IsEqualTo(255);
-        await Assert.That((int)center.B).IsGreaterThan(180);
+        await Assert.That(icon.Frames.Select(frame => frame.PixelWidth).ToArray())
+            .IsEquivalentTo([16, 24, 32, 48, 64, 128, 256]);
     }
 
-    [Test]
-    public async Task AppIcon_WriteMultiSizeIco_WritesValidIcoDirectoryAndPngPayloads()
+    [Test, STAThreadExecutor]
+    public async Task Splash_ShowsCompletedStagesAndIndeterminateModelLoading()
     {
-        using var ms = new MemoryStream();
-        AppIcon.WriteMultiSizeIco(ms, [16, 32, 48, 256]);
-        var bytes = ms.ToArray();
+        var splash = new SplashForm();
+        try
+        {
+            var bar = (System.Windows.Controls.ProgressBar)splash.FindName("StageProgress");
+            var counter = (System.Windows.Controls.TextBlock)splash.FindName("StageCount");
+            var label = (System.Windows.Controls.TextBlock)splash.FindName("StageLabel");
+            var stage = splash.ShowStageAsync(3, "Загрузка модели", indeterminate: true);
+            splash.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            await stage;
+            var during = (bar.IsIndeterminate, bar.Value, counter.Text, status: label.Text);
+            var finalStage = splash.ShowStageAsync(4, "Настройка клавиш");
+            splash.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            await finalStage;
+            var beforeCompletion = (bar.IsIndeterminate, bar.Value);
+            splash.ReportReady();
+            var completed = (bar.IsIndeterminate, bar.Value, counter.Text);
 
-        // ICO header: reserved=0, type=1, count=4
-        await Assert.That(BitConverter.ToUInt16(bytes, 0)).IsEqualTo((ushort)0);
-        await Assert.That(BitConverter.ToUInt16(bytes, 2)).IsEqualTo((ushort)1);
-        await Assert.That(BitConverter.ToUInt16(bytes, 4)).IsEqualTo((ushort)4);
-
-        // 4th directory entry (index 3 -> offset 6 + 3*16 = 54) is 256x256, stored as 0x0 per ICO spec.
-        await Assert.That(bytes[54]).IsEqualTo((byte)0);
-        await Assert.That(bytes[55]).IsEqualTo((byte)0);
-
-        var dataOffset = BitConverter.ToInt32(bytes, 54 + 12);
-        // PNG magic: 89 50 4E 47
-        await Assert.That(bytes[dataOffset]).IsEqualTo((byte)0x89);
-        await Assert.That(bytes[dataOffset + 1]).IsEqualTo((byte)0x50);
-        await Assert.That(bytes[dataOffset + 2]).IsEqualTo((byte)0x4E);
-        await Assert.That(bytes[dataOffset + 3]).IsEqualTo((byte)0x47);
-    }
-
-    [Test]
-    public async Task SplashForm_ReportStage_UpdatesStateClampsProgressAndRendersBitmap()
-    {
-        using var splash = new SplashForm();
-        splash.ReportStage("Загрузка нейросети...", 0.65);
-
-        await Assert.That(splash.CurrentStatus).IsEqualTo("Загрузка нейросети...");
-        await Assert.That(splash.CurrentProgress).IsEqualTo(0.65);
-
-        splash.ReportStage("Переполнение", 1.5);
-        await Assert.That(splash.CurrentProgress).IsEqualTo(1.0);
-
-        splash.ReportStage("Недополнение", -0.4);
-        await Assert.That(splash.CurrentProgress).IsEqualTo(0.0);
-
-        using var preview = splash.RenderPreviewBitmap();
-        await Assert.That(preview.Width).IsEqualTo(splash.ClientSize.Width);
-        await Assert.That(preview.Height).IsEqualTo(splash.ClientSize.Height);
-        // Dark themed background in top-left interior
-        var bg = preview.GetPixel(24, 24);
-        await Assert.That((int)bg.R).IsLessThan(40);
+            await Assert.That(during).IsEqualTo((true, 2d, "Этап 3 из 4", "Загрузка модели"));
+            await Assert.That(beforeCompletion).IsEqualTo((false, 3d));
+            await Assert.That(completed).IsEqualTo((false, 4d, "Готово"));
+        }
+        finally
+        {
+            splash.Close();
+        }
     }
 }

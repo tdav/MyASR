@@ -37,7 +37,7 @@ public static class PowerSpectrum
 
     /// <summary>
     /// Periodic Hann window — the convention <c>torch.hann_window</c> uses, and therefore what
-    /// Whisper's STFT expects. <see cref="HanningWindow"/> is the symmetric variant used by GigaAM.
+    /// Whisper and GigaAM use in their training frontends.
     /// </summary>
     public static float[] HannWindowPeriodic(int n)
     {

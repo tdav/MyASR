@@ -21,6 +21,7 @@
 .nuget/
 
 # Test outputs
+.asr-eval/
 TestResults/
 *.trx
 coverage*.xml

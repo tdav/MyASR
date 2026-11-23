@@ -6,6 +6,7 @@ namespace MyASR;
 
 public sealed class UserSettings
 {
+    public bool DarkTheme { get; set; }
     public string? MicDeviceId { get; set; }
     public string Hotkey { get; set; } = "Ctrl+Shift+X";
     public bool GlobalHotkey { get; set; } = true;

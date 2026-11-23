@@ -40,6 +40,7 @@ public class MelFilterBankTests
         for (var r = 0; r < 64; r++)
             for (var c = 0; c < 161; c++)
                 maxDiff = Math.Max(maxDiff, Math.Abs(ours[r, c] - theirs[r, c]));
-        await Assert.That(maxDiff).IsLessThan(1e-6);
+        // Torchaudio builds its reference weights in float32, while BuildHtk uses double.
+        await Assert.That(maxDiff).IsLessThan(1e-5);
     }
 }

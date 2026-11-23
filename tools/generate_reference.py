@@ -1,94 +1,57 @@
-"""
-Generate golden reference artefacts for MyASR.Tests:
-- reference_filterbank_64x161.json
-- reference.wav (16kHz mono PCM)         (added later in Task 3.2)
-- reference_mel.bin                      (added later in Task 3.2)
-- reference.txt                          (added later in Task 3.2)
-
-Run once: python tools/generate_reference.py
-Requires (for filterbank): numpy.
-For audio/mel/txt extras: numpy, soundfile, gigaam (pip install gigaam).
+"""Regenerate the GigaAM acoustic test fixtures with NumPy, torch and torchaudio.
+If the optional gigaam package is installed, also write a reference transcript.
 """
 import json
-import math
-import os
+import struct
+import wave
+from pathlib import Path
 
 import numpy as np
+import torch
+import torchaudio
 
-OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "MyASR.Tests", "Assets")
-os.makedirs(OUT_DIR, exist_ok=True)
+ASSETS = Path(__file__).resolve().parents[1] / "MyASR.Tests" / "Assets"
+SR, N_FFT, HOP, N_MELS = 16000, 320, 160, 64
 
-SR = 16000
-N_FFT = 320
-HOP = 160
-N_MELS = 64
 
-def hz_to_mel(f):
-    return 2595.0 * math.log10(1.0 + f / 700.0)
+def write_filterbank():
+    bank = torchaudio.functional.melscale_fbanks(
+        N_FFT // 2 + 1, 0.0, SR / 2, N_MELS, SR, norm=None, mel_scale="htk"
+    ).T
+    data = {"shape": list(bank.shape), "data": bank.flatten().tolist()}
+    (ASSETS / "reference_filterbank_64x161.json").write_text(json.dumps(data), encoding="utf-8")
 
-def mel_to_hz(m):
-    return 700.0 * (10 ** (m / 2595.0) - 1.0)
 
-def htk_filterbank(sr=SR, n_fft=N_FFT, n_mels=N_MELS):
-    n_freqs = n_fft // 2 + 1
-    f_low_mel = hz_to_mel(0.0)
-    f_high_mel = hz_to_mel(sr / 2)
-    mel_pts = np.linspace(f_low_mel, f_high_mel, n_mels + 2)
-    hz_pts = np.array([mel_to_hz(m) for m in mel_pts])
-    bin_pts = np.floor((n_fft + 1) * hz_pts / sr).astype(int)
+def write_reference_mel(wav_path):
+    with wave.open(str(wav_path), "rb") as wav:
+        if (wav.getnchannels(), wav.getsampwidth(), wav.getframerate()) != (1, 2, SR):
+            raise ValueError("reference.wav must be mono 16 kHz PCM-16")
+        pcm = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
+    samples = torch.from_numpy(pcm.astype(np.float32) / 32768.0)
+    transform = torchaudio.transforms.MelSpectrogram(
+        sample_rate=SR, n_fft=N_FFT, win_length=N_FFT, hop_length=HOP,
+        n_mels=N_MELS, center=False, mel_scale="htk",
+    )
+    features = transform(samples).clamp(1e-9, 1e9).log().T.numpy().astype("<f4", copy=False)
+    with (ASSETS / "reference_mel.bin").open("wb") as output:
+        output.write(struct.pack("<II", *features.shape))
+        output.write(features.tobytes())
 
-    fb = np.zeros((n_mels, n_freqs), dtype=np.float64)
-    for m in range(1, n_mels + 1):
-        f_m_minus = bin_pts[m - 1]
-        f_m       = bin_pts[m]
-        f_m_plus  = bin_pts[m + 1]
-        for k in range(f_m_minus, f_m):
-            if f_m == f_m_minus: continue
-            fb[m - 1, k] = (k - f_m_minus) / (f_m - f_m_minus)
-        for k in range(f_m, f_m_plus):
-            if f_m_plus == f_m: continue
-            fb[m - 1, k] = (f_m_plus - k) / (f_m_plus - f_m)
-    return fb
 
-def write_filterbank_json(fb):
-    data = {"shape": list(fb.shape), "data": fb.flatten().tolist()}
-    with open(os.path.join(OUT_DIR, "reference_filterbank_64x161.json"), "w", encoding="utf-8") as f:
-        json.dump(data, f)
-
-def write_reference_audio_and_mel():
-    """Synthesizes a chirp WAV, computes its mel via gigaam, and saves expected text."""
+def write_optional_transcript(wav_path):
     try:
         import gigaam
-        import soundfile as sf
-        import torch
-    except ImportError:
-        print("gigaam/soundfile/torch not installed — skipping reference.wav/mel/txt.")
+    except ModuleNotFoundError as exc:
+        if exc.name != "gigaam":
+            raise
+        print("No gigaam package installed, skipping optional reference.txt")
         return
-
-    import struct
-    t = np.linspace(0, 3, 3 * SR, endpoint=False)
-    chirp = 0.3 * np.sin(2 * np.pi * (200 + (4000 - 200) * t / 3) * t)
-    audio = np.concatenate([chirp, np.zeros(SR, dtype=np.float32)]).astype(np.float32)
-    wav_path = os.path.join(OUT_DIR, "reference.wav")
-    sf.write(wav_path, audio, SR, subtype="PCM_16")
-
-    model = gigaam.load_model("v3_rnnt")
-    fe = model.preprocessor
-    feats = fe(torch.from_numpy(audio).unsqueeze(0)).squeeze(0).numpy()
-    feats_t_mels = feats.T.astype(np.float32, copy=False)
-    mel_path = os.path.join(OUT_DIR, "reference_mel.bin")
-    with open(mel_path, "wb") as f:
-        f.write(struct.pack("<II", feats_t_mels.shape[0], feats_t_mels.shape[1]))
-        f.write(feats_t_mels.tobytes())
-
-    text = model.recognize(wav_path).strip()
-    with open(os.path.join(OUT_DIR, "reference.txt"), "w", encoding="utf-8") as f:
-        f.write(text)
+    text = gigaam.load_model("v3_rnnt").transcribe(str(wav_path))
+    (ASSETS / "reference.txt").write_text(text.strip(), encoding="utf-8")
 
 
 if __name__ == "__main__":
-    fb = htk_filterbank()
-    write_filterbank_json(fb)
-    print(f"Wrote reference_filterbank_64x161.json with shape {fb.shape}")
-    write_reference_audio_and_mel()
-    print("done")
+    wav_path = ASSETS / "reference.wav"
+    write_filterbank()
+    write_reference_mel(wav_path)
+    write_optional_transcript(wav_path)

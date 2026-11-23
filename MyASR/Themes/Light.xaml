@@ -1,0 +1,23 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="WindowBackground" Color="#F4F5F9"/>
+    <SolidColorBrush x:Key="SurfaceBackground" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="PrimaryText" Color="#202439"/>
+    <SolidColorBrush x:Key="SecondaryText" Color="#565E73"/>
+    <SolidColorBrush x:Key="BorderColor" Color="#CFD3DF"/>
+    <SolidColorBrush x:Key="ActionBackground" Color="#EFF0F7"/>
+    <SolidColorBrush x:Key="ActionText" Color="#34384D"/>
+    <SolidColorBrush x:Key="FocusBorder" Color="#7971CF"/>
+    <SolidColorBrush x:Key="ReadyBadge" Color="#D9EDE3"/>
+    <SolidColorBrush x:Key="IdleBadge" Color="#E5E6EF"/>
+    <SolidColorBrush x:Key="RecordingBadge" Color="#FFDCD9"/>
+    <SolidColorBrush x:Key="AccentBackground" Color="#D2CCFF"/>
+    <SolidColorBrush x:Key="AccentText" Color="#24213E"/>
+    <SolidColorBrush x:Key="HeroTitle" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="HeroText" Color="#DCDBEB"/>
+    <SolidColorBrush x:Key="MeterFill" Color="#B8E6D5"/>
+    <SolidColorBrush x:Key="MeterTrack" Color="#50506A"/>
+    <LinearGradientBrush x:Key="HeroBackground" StartPoint="0,0" EndPoint="1,0.75">
+        <GradientStop Offset="0" Color="#26263C"/><GradientStop Offset="1" Color="#373253"/>
+    </LinearGradientBrush>
+</ResourceDictionary>

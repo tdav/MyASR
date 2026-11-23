@@ -6,14 +6,14 @@ public sealed class MelSpectrogramExtractor : IFeatureExtractor
     private const int NFft       = 320;
     private const int HopLength  = 160;
     private const int NMels      = 64;
-    private const float LogOffset = 1e-9f;
+    private const float MinEnergy = 1e-9f;
 
     private readonly float[] _window;
     private readonly double[,] _filterBank;
 
     public MelSpectrogramExtractor()
     {
-        _window     = PowerSpectrum.HanningWindow(NFft);
+        _window     = PowerSpectrum.HannWindowPeriodic(NFft);
         _filterBank = MelFilterBank.BuildHtk(SampleRate, NFft, NMels);
     }
 
@@ -34,7 +34,7 @@ public sealed class MelSpectrogramExtractor : IFeatureExtractor
                 double sum = 0;
                 for (var k = 0; k < spec.Length; k++)
                     sum += _filterBank[m, k] * spec[k];
-                feats[i, m] = (float)Math.Log(sum + LogOffset);
+                feats[i, m] = (float)Math.Log(Math.Clamp(sum, MinEnergy, 1e9));
             }
         }
         return feats;

@@ -1,0 +1,110 @@
+<Window x:Class="MyASR.Main" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="MyASR" Icon="/MyASR;component/icon.ico"
+        Width="940" Height="748" MinWidth="650" MinHeight="586" WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource PrimaryText}" FontFamily="Segoe UI" FontSize="14"
+        TextOptions.TextFormattingMode="Display" UseLayoutRounding="True" Language="ru-RU">
+    <Window.Resources>
+        <Geometry x:Key="StopShape">M2,2 H16 V16 H2 Z</Geometry>
+        <Geometry x:Key="MicShape">M8,1 C6,1 5,2.5 5,4.5 L5,8 C5,10 6,11.5 8,11.5 C10,11.5 11,10 11,8 L11,4.5 C11,2.5 10,1 8,1 Z M2,8 A6,6 0 0 0 14,8 M8,14 L8,17 M5,17 L11,17</Geometry>
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="15,8"/>
+            <Setter Property="Background" Value="{DynamicResource ActionBackground}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ActionText}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Plate" CornerRadius="8" Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}" BorderBrush="Transparent" BorderThickness="2">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Plate" Property="Opacity" Value="0.86"/></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Plate" Property="Opacity" Value="0.70"/></Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Plate" Property="BorderBrush" Value="{DynamicResource FocusBorder}"/></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Plate" Property="Opacity" Value="0.55"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="Label">
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="0,0,0,6"/>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="24,18,24,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <DockPanel Margin="0,0,0,16" LastChildFill="False">
+            <Border Width="32" Height="32" CornerRadius="9" Background="{DynamicResource HeroBackground}">
+                <Path Data="{StaticResource MicShape}" Width="16" Height="20" Stretch="Uniform" Stroke="{DynamicResource AccentBackground}"
+                      StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+            </Border>
+            <TextBlock Text="MyASR" FontSize="22" FontWeight="SemiBold" Margin="9,0" VerticalAlignment="Center"/>
+        </DockPanel>
+        <Border Grid.Row="1" CornerRadius="14" Padding="22,16" Background="{DynamicResource HeroBackground}">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="3*"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Диктовка" Foreground="{DynamicResource HeroTitle}" FontSize="29" FontWeight="SemiBold"/>
+                    <Button x:Name="RecordButton" HorizontalAlignment="Left" Margin="0,10,0,0" Padding="13,7"
+                            AutomationProperties.Name="{Binding Text, ElementName=RecordLabel}" ToolTip="Нажмите один раз для записи, ещё раз — для остановки."
+                            Background="{DynamicResource AccentBackground}" Foreground="{DynamicResource AccentText}" FontWeight="SemiBold" IsEnabled="False">
+                        <StackPanel Orientation="Horizontal">
+                            <Path x:Name="RecordGlyph" Data="{StaticResource MicShape}"
+                                  Stroke="{DynamicResource AccentText}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  Width="18" Height="20" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="RecordLabel" Text="Начать запись" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <TextBlock x:Name="HotkeyHint" Text="Нажмите ещё раз для остановки" Foreground="{DynamicResource HeroText}" FontSize="12" Margin="0,7,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
+                    <DockPanel LastChildFill="False">
+                        <TextBlock Text="Уровень входа" Foreground="{DynamicResource HeroText}"/>
+                        <TextBlock x:Name="LevelLabel" DockPanel.Dock="Right" Text="— дБ" Foreground="{DynamicResource HeroText}"/>
+                    </DockPanel>
+                    <ProgressBar x:Name="LevelMeter" Margin="0,8,0,6" Height="8" Maximum="60"
+                                 AutomationProperties.Name="Уровень микрофона" Foreground="{DynamicResource MeterFill}" Background="{DynamicResource MeterTrack}" BorderThickness="0"/>
+                    <TextBlock x:Name="ClockLabel" Text="00:00" FontFamily="Consolas" Foreground="{DynamicResource HeroText}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+        <Grid Grid.Row="2" Margin="0,15,0,16">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="5*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="4*"/></Grid.ColumnDefinitions>
+            <StackPanel>
+                <Label Target="{Binding ElementName=ModelCombo}">Модель распознавания</Label>
+                <ComboBox x:Name="ModelCombo" MinHeight="34" DisplayMemberPath="DisplayName" IsEnabled="False" AutomationProperties.Name="Модель распознавания"
+                          ToolTip="{Binding SelectedItem.DisplayName, RelativeSource={RelativeSource Self}}"/>
+            </StackPanel>
+            <StackPanel Grid.Column="2">
+                <Label Target="{Binding ElementName=DeviceCombo}">Микрофон</Label>
+                <ComboBox x:Name="DeviceCombo" MinHeight="34" DisplayMemberPath="FriendlyName" IsEnabled="False" AutomationProperties.Name="Микрофон"
+                          ToolTip="{Binding SelectedItem.FriendlyName, RelativeSource={RelativeSource Self}}"/>
+            </StackPanel>
+        </Grid>
+        <Border Grid.Row="3" Background="{DynamicResource SurfaceBackground}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" CornerRadius="12" Padding="18,12">
+            <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <TextBlock Text="Расшифровка" FontSize="21" FontWeight="SemiBold"/>
+                <Grid Grid.Row="1" Margin="0,9">
+                    <TextBox x:Name="ResultBox" AutomationProperties.Name="Текст расшифровки" IsReadOnly="True" IsUndoEnabled="False" TextWrapping="Wrap"
+                             AcceptsReturn="True" Background="{DynamicResource SurfaceBackground}" BorderThickness="0" FontSize="16" Foreground="{DynamicResource PrimaryText}" VerticalScrollBarVisibility="Auto"/>
+                    <TextBlock x:Name="EmptyHint" Text="Текст появится здесь во время диктовки." Margin="3,2" Foreground="{DynamicResource SecondaryText}"
+                               IsHitTestVisible="False" TextWrapping="Wrap"/>
+                </Grid>
+                <DockPanel x:Name="TextActions" Grid.Row="2" LastChildFill="False" IsEnabled="False">
+                    <Button x:Name="CopyButton" Content="Копировать" Margin="0,0,8,0"/>
+                    <Button x:Name="SaveButton" Content="Сохранить TXT"/>
+                    <Button x:Name="ClearButton" DockPanel.Dock="Right" Background="Transparent" Content="Очистить"/>
+                </DockPanel>
+            </Grid>
+        </Border>
+        <TextBlock Grid.Row="4" x:Name="StatusLabel" Margin="2,9,0,0" Text="Подготовка модели…" TextWrapping="Wrap"
+                   Foreground="{DynamicResource SecondaryText}" FontSize="12" AutomationProperties.LiveSetting="Polite"/>
+    </Grid>
+</Window>

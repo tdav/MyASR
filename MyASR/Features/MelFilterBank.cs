@@ -8,27 +8,23 @@ public static class MelFilterBank
         var fLowMel  = HzToMel(0.0);
         var fHighMel = HzToMel(sampleRate / 2.0);
 
-        var melPts = new double[nMels + 2];
-        for (var i = 0; i < melPts.Length; i++)
-            melPts[i] = fLowMel + (fHighMel - fLowMel) * i / (melPts.Length - 1);
-
-        var binPts = new int[melPts.Length];
-        for (var i = 0; i < melPts.Length; i++)
-        {
-            var hz = MelToHz(melPts[i]);
-            binPts[i] = (int)Math.Floor((nFft + 1) * hz / sampleRate);
-        }
+        var edgesHz = new double[nMels + 2];
+        for (var i = 0; i < edgesHz.Length; i++)
+            edgesHz[i] = MelToHz(fLowMel + (fHighMel - fLowMel) * i / (edgesHz.Length - 1));
 
         var fb = new double[nMels, nFreqs];
-        for (var m = 1; m <= nMels; m++)
+        for (var m = 0; m < nMels; m++)
         {
-            int left = binPts[m - 1], center = binPts[m], right = binPts[m + 1];
-            for (var k = left; k < center; k++)
-                if (center != left)
-                    fb[m - 1, k] = (k - left) / (double)(center - left);
-            for (var k = center; k < right; k++)
-                if (right != center)
-                    fb[m - 1, k] = (right - k) / (double)(right - center);
+            var left = edgesHz[m];
+            var center = edgesHz[m + 1];
+            var right = edgesHz[m + 2];
+            for (var k = 0; k < nFreqs; k++)
+            {
+                var hz = (double)k * sampleRate / nFft;
+                var rising = (hz - left) / (center - left);
+                var falling = (right - hz) / (right - center);
+                fb[m, k] = Math.Max(0, Math.Min(rising, falling));
+            }
         }
         return fb;
     }

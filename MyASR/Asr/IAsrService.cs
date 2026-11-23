@@ -12,6 +12,8 @@ public interface IAsrService
     ModelDescriptor CurrentModel { get; }
 
     event Action<AsrStateChanged>? StateChanged;
+    /// <summary>Current recording only. The latest preview replaces its predecessor.</summary>
+    event Action<string>? PreviewReady;
     event Action<AsrResult>? ResultReady;
     event Action<Exception>? Failed;
 

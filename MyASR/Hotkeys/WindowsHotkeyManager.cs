@@ -15,9 +15,6 @@ public sealed partial class WindowsHotkeyManager : IHotkeyManager
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool UnregisterHotKey(IntPtr hWnd, int id);
 
-    [LibraryImport("user32.dll")]
-    private static partial short GetAsyncKeyState(int vKey);
-
     public bool Register(IntPtr hWnd, int id, uint modifiers, uint vk)
     {
         if (RegisterHotKey(hWnd, id, modifiers, vk))
@@ -27,8 +24,6 @@ public sealed partial class WindowsHotkeyManager : IHotkeyManager
         }
         return false;
     }
-
-    public bool IsKeyDown(uint vk) => (GetAsyncKeyState((int)vk) & 0x8000) != 0;
 
     public void Dispose()
     {

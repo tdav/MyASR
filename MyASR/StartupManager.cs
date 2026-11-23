@@ -29,5 +29,5 @@ internal static class StartupManager
     }
 
     private static string ExecutablePath() =>
-        $"\"{Environment.ProcessPath ?? Application.ExecutablePath}\"";
+        $"\"{Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "MyASR.exe")}\"";
 }
